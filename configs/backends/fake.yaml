@@ -1,0 +1,8 @@
+type: fake
+max_concurrency: 4
+kv_budget_tokens: 16384
+prefill_tok_s: 2000
+decode_tok_s: 60
+contention: 0.15
+completion_tokens: 32
+time_scale: 1.0

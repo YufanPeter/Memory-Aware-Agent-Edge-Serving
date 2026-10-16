@@ -1,0 +1,6 @@
+# Quick end-to-end check on the real model: 2 points, 8 tasks each.
+ref: _base.yaml
+name: smoke
+workload: {n_tasks: 8, arrival: {type: poisson, rate: 0.5}}
+sweep:
+  "scheduler.max_concurrency,backend.parallel": [1, 4]

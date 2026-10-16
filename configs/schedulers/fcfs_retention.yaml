@@ -1,0 +1,4 @@
+# 10 FCFS + scheduler-managed KV retention (agent pinned to a slot; explicit eviction policy)
+type: fcfs
+max_concurrency: 4
+retention: {type: tool_aware, mode: erase}   # server | lru | largest | tool_aware ; erase | swap

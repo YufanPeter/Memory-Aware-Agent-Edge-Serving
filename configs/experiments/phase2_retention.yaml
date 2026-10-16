@@ -1,0 +1,16 @@
+# KV retention during tool idle (#10): which agent's KV to give up, and erase vs swap.
+# More agents than slots and a small pool, so retention decisions matter.
+ref: _base.yaml
+name: phase2_retention
+backend: {parallel: 4, ctx_size: 6144}
+workload: {n_tasks: 40, arrival: {type: poisson, rate: 0.6}}
+agent: {tools: {delay: {type: lognormal, median: 1.5, sigma: 0.8, max_s: 8.0}}}
+seeds: [0]
+sweep:
+  scheduler.retention:
+    - {type: server}
+    - {type: lru, mode: erase}
+    - {type: lru, mode: swap}
+    - {type: largest, mode: erase}
+    - {type: tool_aware, mode: erase}
+    - {type: tool_aware, mode: swap}

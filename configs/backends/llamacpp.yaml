@@ -1,0 +1,11 @@
+type: llamacpp
+binary: llama-server
+port: 8090
+parallel: 4            # server slots; keep >= scheduler.max_concurrency
+ctx_size: 16384        # shared KV pool in tokens (kv_unified) = memory budget (~448 MiB here)
+kv_unified: true
+flash_attn: "on"
+n_gpu_layers: 99
+cache_ram: 0           # disable host-RAM prompt cache so memory is attributable to the KV pool
+cache_prompt: true     # reuse KV of a slot's previous prompt prefix
+request_timeout: 300

@@ -1,0 +1,6 @@
+type: hotpotqa
+path: data/hotpotqa/distractor/validation-00000-of-00001.parquet
+max_tokens: 256
+n_sentences: 5
+evaluators:
+  - {type: qa_em_f1}

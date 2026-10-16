@@ -1,0 +1,9 @@
+# Agent/model quality independent of scheduling: no tool delay, burst arrival, high K.
+# Use to validate a model+agent combination before running scheduling sweeps.
+ref: _base.yaml
+name: quality_check
+scheduler: {max_concurrency: 8}
+backend: {parallel: 8, ctx_size: 32768}
+agent: {tools: {delay: {type: none}, per_tool_delay: {}}}
+workload: {n_tasks: 40, arrival: {type: burst}}
+monitors: []

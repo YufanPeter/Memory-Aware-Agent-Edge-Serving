@@ -1,0 +1,7 @@
+# 6  Multi-level feedback queue (request-level least attained service, FastServe-style skip-join)
+type: mlfq
+max_concurrency: 4
+quantum: 16            # level-l chunk = quantum * 2^l
+levels: 4
+skip_join: true
+retention: {type: server}

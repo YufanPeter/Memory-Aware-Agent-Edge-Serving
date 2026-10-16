@@ -1,0 +1,8 @@
+# 7  Agent-level least attained service (priority by the whole task's accumulated backend time)
+type: las
+max_concurrency: 4
+quantum: 32
+base_s: 1.0            # level = floor(log2(1 + task_service / base_s))
+levels: 5
+aging_s: 60            # anti-starvation
+retention: {type: server}

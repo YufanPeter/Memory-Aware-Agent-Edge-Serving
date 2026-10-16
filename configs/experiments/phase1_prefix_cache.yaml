@@ -1,0 +1,8 @@
+# Does retained context / prefix reuse matter on this runtime? cache_prompt on vs off.
+ref: _base.yaml
+name: phase1_prefix_cache
+scheduler: {max_concurrency: 4}
+backend: {parallel: 4}
+workload: {n_tasks: 30, arrival: {type: poisson, rate: 0.5}}
+sweep:
+  backend.cache_prompt: [true, false]

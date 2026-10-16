@@ -1,0 +1,13 @@
+# Quick real-model check that every policy runs end to end (8 tasks each).
+ref: phase2_policies.yaml
+name: phase2_smoke
+workload: {n_tasks: 8, arrival: {type: poisson, rate: 0.5}}
+sweep:
+  scheduler:
+    - {ref: schedulers/fcfs.yaml}
+    - {ref: schedulers/rr.yaml}
+    - {ref: schedulers/srpt.yaml}
+    - {ref: schedulers/mlfq.yaml}
+    - {ref: schedulers/las.yaml}
+    - {ref: schedulers/mem_aware.yaml, order: las}
+    - {ref: schedulers/fcfs_retention.yaml}

@@ -1,0 +1,3 @@
+orchestration: {type: single_shot, reasoning: false}
+memory: {type: full_history}
+tools: {}
