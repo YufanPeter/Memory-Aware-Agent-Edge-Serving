@@ -1,5 +1,0 @@
-# 4  Round robin: every request yields after `quantum` tokens
-type: rr
-max_concurrency: 4
-quantum: 32
-retention: {type: server}

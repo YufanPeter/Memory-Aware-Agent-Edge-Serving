@@ -1,8 +1,0 @@
-# Phase 1 FCFS baseline grid: concurrency x arrival rate x workload mix x KV budget.
-ref: _base.yaml
-name: phase1_sweep
-workload: {n_tasks: 40}
-seeds: [0, 1]
-sweep:
-  "scheduler.max_concurrency,backend.parallel": [1, 2, 4, 8, 16]
-  workload.arrival.rate: [0.2, 0.5, 1.0]

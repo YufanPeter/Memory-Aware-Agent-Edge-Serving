@@ -1,5 +1,0 @@
-# All 10 paragraphs pre-loaded (~1.5k prompt tokens from step 0), longer replies.
-n_tasks: 40
-arrival: {type: poisson, rate: 0.3}
-mix:
-  - {name: long_ctx, task: hotpotqa, weight: 1, tags: {context: long, max_tokens: 384}}

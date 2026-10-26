@@ -1,5 +1,0 @@
-n_tasks: 40
-arrival: {type: poisson, rate: 0.3}
-mix:
-  - {name: short_ctx, task: hotpotqa, weight: 0.5, tags: {context: short, max_tokens: 128}}
-  - {name: long_ctx,  task: hotpotqa, weight: 0.5, tags: {context: long,  max_tokens: 384}}

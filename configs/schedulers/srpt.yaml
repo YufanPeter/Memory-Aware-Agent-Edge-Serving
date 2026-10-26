@@ -1,6 +1,0 @@
-# 5  Shortest remaining processing time (prefill of uncached prompt + predicted remaining decode)
-type: srpt
-max_concurrency: 4
-quantum: 32
-aging_s: null          # set e.g. 60 to bound starvation of long requests
-retention: {type: server}

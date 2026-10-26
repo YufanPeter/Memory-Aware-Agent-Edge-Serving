@@ -1,9 +1,0 @@
-# Same pipeline with the simulated backend (no model needed) -- only backend.type changes.
-ref: _base.yaml
-name: smoke_fake
-backend: {ref: backends/fake.yaml}
-model: {name: fake}
-agent: {tools: {delay: {type: fixed, seconds: 0.05}}}
-workload: {n_tasks: 12, arrival: {type: burst}}
-sweep:
-  "scheduler.max_concurrency,backend.max_concurrency": [1, 4]

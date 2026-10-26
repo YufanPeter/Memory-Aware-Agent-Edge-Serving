@@ -1,5 +1,0 @@
-# Retrieval-driven multi-step tasks: small initial context, grows via observations.
-n_tasks: 40
-arrival: {type: poisson, rate: 0.3}
-mix:
-  - {name: short_ctx, task: hotpotqa, weight: 1, tags: {context: short, max_tokens: 128}}

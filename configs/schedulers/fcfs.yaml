@@ -1,3 +1,0 @@
-type: fcfs
-max_concurrency: 4      # K: max in-flight LLM requests
-max_active_tasks: null  # optional task-level admission cap (null = unlimited)

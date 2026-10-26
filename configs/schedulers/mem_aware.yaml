@@ -1,8 +1,0 @@
-# 8  Memory-pressure preemption: KV-projected admission + eviction of paused requests' KV
-type: mem_aware
-order: fcfs            # any policy's ordering: fcfs | rr | srpt | mlfq | las
-headroom: 0.1          # keep projected active KV <= 90% of backend.ctx_size
-backfill: false        # strict reservation for the highest-priority blocked request
-quantum: 32
-max_concurrency: null  # default = backend slots; memory is the limiter
-retention: {type: lru, mode: erase}   # erase = recompute on resume, swap = save/restore

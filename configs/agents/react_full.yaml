@@ -1,8 +1,0 @@
-# Agent = orchestration x tools x memory (each swappable independently)
-orchestration: {type: react, max_steps: 7, force_finish: true}
-memory: {type: full_history}
-tools:
-  delay: {type: exponential, mean: 1.0, max_s: 5.0}   # controlled tool latency (idle gap between steps)
-  per_tool_delay:
-    lookup: {type: fixed, seconds: 0.2}
-  timeout: 30
