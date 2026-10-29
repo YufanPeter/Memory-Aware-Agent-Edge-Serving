@@ -22,7 +22,7 @@ def main() -> None:
             docs.setdefault(t, sents)   # a few titles have slightly different text; keep the first
 
     CORPUS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(CORPUS_DIR / "corpus.jsonl", "w") as f:
+    with open(CORPUS_DIR / "corpus.jsonl", "w", encoding="utf-8", newline="\n") as f:
         for t, sents in docs.items():
             f.write(json.dumps({"title": t, "sentences": sents}, ensure_ascii=False) + "\n")
 

@@ -54,11 +54,11 @@ def load_raw(path: str | Path = RAW_PATH) -> list[HotpotItem]:
 def save_split(items: list[HotpotItem], path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(it.to_json() + "\n" for it in items))
+    path.write_text("".join(it.to_json() + "\n" for it in items), encoding="utf-8", newline="\n")
 
 
 def load_split(name_or_path: str | Path) -> list[HotpotItem]:
     path = Path(name_or_path)
     if not path.suffix:
         path = SPLIT_DIR / f"{name_or_path}.jsonl"
-    return [HotpotItem.from_dict(json.loads(line)) for line in path.read_text().splitlines() if line]
+    return [HotpotItem.from_dict(json.loads(line)) for line in path.read_text(encoding="utf-8").splitlines() if line]

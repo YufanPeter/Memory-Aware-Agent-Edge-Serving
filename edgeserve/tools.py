@@ -77,8 +77,21 @@ class ToolBox:
         obs = Observation()
         title = self.corpus.find_title(arg.strip())
         if title is None:
-            similar = self.corpus.similar_titles(arg)
-            obs.add("obs_meta", f"Could not find [{arg}]. Similar: {similar}.")
+            # Like a real search engine: on a title miss, show the best full-text matches
+            # (1 paragraph, or 1 + neighbors for the long profile) and list the rest as titles.
+            hits = self.corpus.text_search(arg, 5)
+            shown = hits[:1 + self.n_neighbors]
+            if not shown:
+                obs.add("obs_meta", f"Could not find [{arg}]. Similar: {self.corpus.similar_titles(arg)}.")
+                return obs
+            obs.add("obs_meta", f"Could not find [{arg}]. Closest result: ")
+            self._current, self._lookup_kw = shown[0], None
+            for i, t in enumerate(shown):
+                if i:
+                    obs.add("obs_meta", "\n")
+                self._add_paragraph(obs, t, self.search_sentences)
+            if rest := hits[len(shown):]:
+                obs.add("obs_meta", f"\nSimilar: {rest}.")
             return obs
         self._current, self._lookup_kw = title, None
         self._add_paragraph(obs, title, self.search_sentences)

@@ -28,12 +28,12 @@ CHATML = {
 
 REACT_RULES = """Solve a question answering task by interleaving Thought, Action and Observation steps.
 Thought reasons about the current situation. Action is one of three types:
-(1) search[entity]: returns the first sentences of the Wikipedia paragraph about entity if it exists. If not, it lists similar titles to search instead.
+(1) search[entity]: returns the first sentences of the Wikipedia paragraph about entity if it exists. If not, it returns the closest full-text search result and lists similar titles.
 (2) lookup[keyword]: returns the next sentence containing keyword in the paragraph you searched last.
 (3) finish[answer]: returns the answer and finishes the task. The answer is a short phrase taken from the observations, or yes/no.
 Each step is exactly one Thought line and one Action line. Then stop and wait for the Observation."""
 
-EXPLAIN_RULE = """Before the finish action, write one Explanation line: a detailed explanation of 150 to 250 words that walks through the evidence from the observations and shows how it leads to the answer."""
+EXPLAIN_RULE = """After the finish action, write an Explanation: a detailed explanation of 150 to 250 words that walks through the evidence from the observations and shows how it leads to the answer."""
 
 ONESHOT_RULES = """Answer the question using the Wikipedia paragraphs given with it.
 Write one Thought line with your reasoning, then one Action line of the form finish[answer].
@@ -109,12 +109,9 @@ EXAMPLES = [
              "[One Hundred Years of Solitude] One Hundred Years of Solitude is a 1967 novel by Colombian author Gabriel García Márquez."),
             ("The author is Gabriel García Márquez. I need the prize he received in 1982.",
              "search[Gabriel Marquez author]",
-             "Could not find [Gabriel Marquez author]. Similar: ['Gabriel García Márquez', 'Gabriel Byrne', 'Márquez (surname)']."),
-            ("I should search the exact title Gabriel García Márquez.",
-             "search[Gabriel García Márquez]",
-             "[Gabriel García Márquez] Gabriel García Márquez was a Colombian novelist and journalist. He was awarded the 1982 Nobel Prize in Literature."),
+             "Could not find [Gabriel Marquez author]. Closest result: [Gabriel García Márquez] Gabriel García Márquez was a Colombian novelist and journalist. He was awarded the 1982 Nobel Prize in Literature.\nSimilar: ['Gabriel Byrne', 'Márquez (surname)']."),
         ],
-        "final": ("He was awarded the Nobel Prize in Literature in 1982.", "Nobel Prize in Literature",
+        "final": ("The closest result is his paragraph, and it says he was awarded the Nobel Prize in Literature in 1982.", "Nobel Prize in Literature",
                   "The novel is by Gabriel García Márquez, and his paragraph says he was awarded the 1982 Nobel Prize in Literature."),
     },
     {
@@ -140,9 +137,9 @@ def render_example(ex: dict, explain: bool) -> str:
     n = len(ex["steps"]) + 1
     thought, answer, explanation = ex["final"]
     lines.append(f"Thought {n}: {thought}")
+    lines.append(f"Action {n}: finish[{answer}]")
     if explain:
         lines.append(f"Explanation: {explanation}")
-    lines.append(f"Action {n}: finish[{answer}]")
     return "\n".join(lines)
 
 

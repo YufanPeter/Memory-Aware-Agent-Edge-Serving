@@ -64,11 +64,15 @@ class LlamaServerClient:
         r.raise_for_status()
         return r.json()
 
-    async def generate(self, prompt: str, n_predict: int, stop: list[str], slot: int = -1) -> LLMResult:
+    async def generate(self, prompt: str, n_predict: int, stop: list[str], slot: int = -1,
+                       ignore_eos: bool = False) -> LLMResult:
+        """ignore_eos=True decodes exactly n_predict tokens (unless a stop string hits)."""
         body: dict[str, Any] = {
             "prompt": prompt, "n_predict": n_predict, "stop": stop, "stream": True,
             "cache_prompt": self.cache_prompt, "temperature": 0.0, "seed": self.seed,
         }
+        if ignore_eos:
+            body["ignore_eos"] = True
         if slot >= 0:
             body["id_slot"] = slot
         res = LLMResult(ok=False, t_start=time.monotonic())
@@ -129,7 +133,8 @@ class MockLLM:
     async def props(self) -> dict[str, Any]:
         return {"build_info": "mock", "total_slots": 64, "model_path": "mock"}
 
-    async def generate(self, prompt: str, n_predict: int, stop: list[str], slot: int = -1) -> LLMResult:
+    async def generate(self, prompt: str, n_predict: int, stop: list[str], slot: int = -1,
+                       ignore_eos: bool = False) -> LLMResult:
         t0 = time.monotonic()
         cached = self.slots.get(slot, "") if slot >= 0 else ""
         common = 0
@@ -142,6 +147,8 @@ class MockLLM:
         for s in stop:
             if s in text:
                 text, stop_type = text[: text.index(s)], "word"
+        if ignore_eos and stop_type == "eos":
+            text, stop_type = (text or " x").ljust(n_predict * 4, "x"), "limit"
         text = text[: n_predict * 4]
         cache_n, prompt_n, predicted_n = common // 4, (len(prompt) - common) // 4, len(text) // 4
         await asyncio.sleep(prompt_n * self.prefill_s_per_token)

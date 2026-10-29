@@ -11,6 +11,7 @@ dependencies = [
     "bm25s>=0.2",
     "rapidfuzz>=3.9",
     "numpy>=1.26",
+    "psutil>=5.9",
 ]
 
 [project.optional-dependencies]

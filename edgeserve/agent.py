@@ -6,6 +6,7 @@ observation, then the next "Thought i:" label. See prompt.py for why.
 from __future__ import annotations
 
 import asyncio
+import random
 import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -19,8 +20,8 @@ from edgeserve.profiles import Profile
 from edgeserve.prompt import CHATML, CLOSEDBOOK_RULES, ONESHOT_RULES, Prompt, react_system
 from edgeserve.tools import ToolBox
 
-STOP = ["\nObservation"] + CHATML["stop"]
-_ACTION_LINE = re.compile(r"^\s*Action\s*\d*\s*:\s*(.*)$", re.M)
+STOP = ["\nObservation", "\nExplanation"] + CHATML["stop"]   # the Explanation is its own request
+_ACTION_LINE = re.compile(r"^\s*Action\s*\d*\s*:?\s*(.*)$", re.M)   # the colon is sometimes dropped
 _ACTION = re.compile(r"([A-Za-z_]+)\s*\[(.*)\]")
 _FINISH_LOOSE = re.compile(r"finish\s*[:\[]?\s*(.+?)\]?\s*$", re.I)
 
@@ -75,10 +76,10 @@ class Agent:
         self.seed, self.delay_scale = seed, delay_scale
 
     async def _generate(self, trace: TaskTrace, prompt: Prompt, step: int, kind: str,
-                        n_predict: int, stop: list[str]) -> tuple[LLMResult, StepRecord]:
+                        n_predict: int, stop: list[str], ignore_eos: bool = False) -> tuple[LLMResult, StepRecord]:
         self.events.emit("req_start", task_id=trace.task_id, step=step, kind=kind, slot=trace.slot,
                          prompt_chars=len(prompt.text))
-        res = await self.llm.generate(prompt.text, n_predict, stop, trace.slot)
+        res = await self.llm.generate(prompt.text, n_predict, stop, trace.slot, ignore_eos)
         info = res.to_dict()
         for k in ("t_start", "t_first_token", "t_end"):
             info[k] = self.events.rel(info[k]) if info[k] else None
@@ -107,7 +108,12 @@ class Agent:
             p.add("control", "Question: ")
         else:
             p.add("shared_prefix", CHATML["system"].format(content=ONESHOT_RULES) + CHATML["user_open"] + "Context:\n")
-            ctx = tools.paragraphs([t for t in item.titles if t in self.corpus.docs])
+            titles = [t for t in item.titles if t in self.corpus.docs]
+            if profile.extra_paragraphs > 0:   # longer context: BM25 distractors, order fixed per question
+                hits = self.corpus.text_search(item.question, profile.extra_paragraphs + len(titles))
+                titles += [t for t in hits if t not in titles][:profile.extra_paragraphs]
+                random.Random(item.id).shuffle(titles)
+            ctx = tools.paragraphs(titles)
             p.extend(ctx.pieces)
             trace.sf_seen |= ctx.sf_hits
             p.add("control", "\nQuestion: ")
@@ -127,7 +133,7 @@ class Agent:
     async def _run_react(self, trace: TaskTrace, item: HotpotItem, tools: ToolBox, profile: Profile) -> None:
         delays = DelaySampler(profile.delay, profile.per_tool_delay, self.delay_scale)
         p = Prompt()
-        system = react_system(profile.few_shot, profile.explain)
+        system = react_system(profile.few_shot, profile.explain_tokens > 0)
         p.add("shared_prefix", CHATML["system"].format(content=system) + CHATML["user_open"] + "Question: ")
         p.add("question", item.question)
         p.add("control", CHATML["user_close_assistant_open"] + "Thought 1:")
@@ -154,6 +160,7 @@ class Agent:
             rec.action, rec.arg = parsed
             if rec.action == "finish":
                 trace.prediction = rec.arg
+                await self._explain(trace, p, n + 1, profile)
                 return
             rec.tool_delay_s = delays.sample(rec.action, self.seed, trace.task_id, n)
             self.events.emit("tool_start", task_id=trace.task_id, step=n, tool=rec.action, delay_s=rec.tool_delay_s)
@@ -176,3 +183,14 @@ class Agent:
             p.add("thought_action", res.text)
             rec.action, rec.arg = "finish", res.text.strip()
             trace.prediction = rec.arg
+            p.add("control", "]")
+            await self._explain(trace, p, n + 1, profile)
+
+    async def _explain(self, trace: TaskTrace, p: Prompt, step: int, profile: Profile) -> None:
+        """Long-output profiles: after the answer, decode a fixed-length Explanation."""
+        if profile.explain_tokens <= 0:
+            return
+        p.add("control", "\nExplanation:")
+        res, _ = await self._generate(trace, p, step, "explain", profile.explain_tokens, [], ignore_eos=True)
+        if res.ok:
+            p.add("thought_action", res.text)

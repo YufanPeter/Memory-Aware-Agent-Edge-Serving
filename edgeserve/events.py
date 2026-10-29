@@ -11,7 +11,7 @@ class EventLog:
     def __init__(self, path: str | Path | None = None) -> None:
         self.t0 = time.monotonic()
         self.wall0 = time.time()
-        self._f = open(path, "w", buffering=1) if path else None
+        self._f = open(path, "w", buffering=1, encoding="utf-8", newline="\n") if path else None
         self.events: list[dict[str, Any]] = []
 
     def rel(self, t_monotonic: float) -> float:

@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import psutil
 
 from edgeserve.agent import Agent, TaskTrace
 from edgeserve.corpus import Corpus
@@ -71,9 +72,10 @@ async def _monitor(events: EventLog, base_url: str | None, server_pid: int | Non
                 mem, util = out.strip().splitlines()[0].split(",")
                 s["gpu_mem_mib"], s["gpu_util"] = float(mem), float(util)
         if server_pid:
-            out = subprocess.run(["ps", "-o", "rss=", "-p", str(server_pid)], capture_output=True, text=True).stdout
-            if out.strip():
-                s["server_rss_mib"] = int(out.strip()) / 1024
+            try:
+                s["server_rss_mib"] = psutil.Process(server_pid).memory_info().rss / 2**20
+            except psutil.Error:
+                pass
         if client:
             try:
                 r = await client.get(f"{base_url}/metrics")
@@ -113,7 +115,7 @@ def summarize(rows: list[dict[str, Any]], makespan: float) -> dict[str, Any]:
 async def run(args: argparse.Namespace) -> dict[str, Any]:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    wl_text = Path(args.workload).read_text()
+    wl_text = Path(args.workload).read_text(encoding="utf-8")
     wl = load_workload(args.workload)
     profiles = load_profiles(args.profiles)
     items = {it.id: it for it in load_split(wl["meta"].get("split", "dev"))}
@@ -133,7 +135,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     agent = Agent(llm, corpus, events, seed=args.seed, delay_scale=args.delay_scale)
     queue: asyncio.Queue = asyncio.Queue()
     rows: list[dict[str, Any]] = []
-    tasks_f = open(out / "tasks.jsonl", "w", buffering=1)
+    tasks_f = open(out / "tasks.jsonl", "w", buffering=1, encoding="utf-8", newline="\n")
 
     async def arrive() -> None:
         for t in sorted(wl["tasks"], key=lambda t: t["arrival_s"]):
@@ -194,9 +196,9 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         "git_rev": _git_rev(), "host": platform.node(), "platform": platform.platform(),
         "started_wall": events.wall0,
     }
-    (out / "meta.json").write_text(json.dumps(meta, indent=1, default=str))
+    (out / "meta.json").write_text(json.dumps(meta, indent=1, default=str), encoding="utf-8", newline="\n")
     summary = summarize(rows, makespan)
-    (out / "summary.json").write_text(json.dumps(summary, indent=1))
+    (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8", newline="\n")
     return summary
 
 

@@ -15,6 +15,7 @@ def test_parse_action():
     assert parse_action("Thought.\nAction: finish Peter Jacobson") == ("finish", "Peter Jacobson")
     assert parse_action("Thought.\nAction: search Peter Jacobson") is None
     assert parse_action("no action here") is None
+    assert parse_action("Thought.\nAction  finish[Riders of the Purple Sage]") == ("finish", "Riders of the Purple Sage")
 
 
 async def test_react_finishes_and_prompt_is_append_only(corpus, item):
@@ -76,10 +77,27 @@ async def test_oneshot_uses_items_paragraphs(corpus, item):
     assert "[Ed Wood (film)]" in llm.calls[0]["prompt"]
 
 
+async def test_explain_is_a_fixed_length_step(corpus, item):
+    llm = MockLLM(scripted([" Done.\nAction 1: finish[yes]\nExplanation: short", " Because."]))
+    trace = await Agent(llm, corpus, EventLog()).run("t", item, Profile(name="e", explain_tokens=10), slot=0)
+    assert trace.status == "ok" and trace.prediction == "yes"
+    assert [s.kind for s in trace.steps] == ["react", "explain"]
+    assert trace.steps[-1].llm["predicted_n"] == 10
+    assert llm.calls[1]["prompt"].endswith("finish[yes]\nExplanation:")
+
+
+async def test_oneshot_extra_paragraphs(corpus, item):
+    corpus.text_search = lambda q, n: ["Ed Wood", "Doctor Strange (2016 film)"]
+    llm = MockLLM(lambda p: " Yes.\nAction 1: finish[yes]")
+    await Agent(llm, corpus, EventLog()).run("t", item, Profile(name="o", mode="oneshot", extra_paragraphs=5), slot=0)
+    prompt = llm.calls[0]["prompt"]
+    assert prompt.count("[Ed Wood]") == 1 and "[Doctor Strange (2016 film)]" in prompt
+
+
 async def test_llm_error_is_classified(corpus, item):
     class Failing(MockLLM):
-        async def generate(self, prompt, n_predict, stop, slot=-1):
-            res = await super().generate(prompt, n_predict, stop, slot)
+        async def generate(self, prompt, n_predict, stop, slot=-1, ignore_eos=False):
+            res = await super().generate(prompt, n_predict, stop, slot, ignore_eos)
             res.ok, res.error = False, "HTTP 400: the request exceeds the available context size"
             return res
     trace = await Agent(Failing(lambda p: "x"), corpus, EventLog()).run("t", item, Profile(name="p"), slot=0)

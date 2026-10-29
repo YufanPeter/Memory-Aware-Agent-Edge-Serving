@@ -45,7 +45,7 @@ class Corpus:
     def load(cls, path: str | Path = CORPUS_DIR, with_bm25: bool = False) -> Corpus:
         path = Path(path)
         docs = {}
-        for line in (path / "corpus.jsonl").read_text().splitlines():
+        for line in (path / "corpus.jsonl").read_text(encoding="utf-8").splitlines():
             d = json.loads(line)
             docs[d["title"]] = d["sentences"]
         bm25 = None
@@ -68,17 +68,21 @@ class Corpus:
         hit = process.extractOne(q, self._norm_titles, scorer=fuzz.ratio, score_cutoff=FUZZY_CUTOFF)
         return self.titles[hit[2]] if hit else None
 
+    def text_search(self, query: str, n: int = 5) -> list[str]:
+        """Titles of the n best full-text BM25 matches (empty without an index)."""
+        if self._bm25 is None:
+            return []
+        import bm25s
+
+        ids, scores = self._bm25.retrieve(bm25s.tokenize([query], stopwords="en", show_progress=False),
+                                          k=n, show_progress=False)
+        return [self.titles[i] for i, s in zip(ids[0], scores[0]) if s > 0]
+
     def similar_titles(self, query: str, n: int = 5) -> list[str]:
         """Suggestions for a failed search: full-text BM25 hits (like Wikipedia's search
         results in the ReAct paper's tool), or fuzzy title matches without an index."""
-        if self._bm25 is not None:
-            import bm25s
-
-            ids, scores = self._bm25.retrieve(bm25s.tokenize([query], stopwords="en", show_progress=False),
-                                              k=n, show_progress=False)
-            hits = [self.titles[i] for i, s in zip(ids[0], scores[0]) if s > 0]
-            if hits:
-                return hits
+        if hits := self.text_search(query, n):
+            return hits
         hits = process.extract(norm(query), self._norm_titles, scorer=fuzz.WRatio, limit=n)
         return [self.titles[i] for _, _, i in hits]
 

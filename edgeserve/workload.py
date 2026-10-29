@@ -79,13 +79,13 @@ def save_workload(wl: dict[str, Any], path: str | Path) -> str:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(wl, indent=1, sort_keys=True)
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8", newline="\n")
     return hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
 def load_workload(path: str | Path) -> dict[str, Any]:
-    return json.loads(Path(path).read_text())
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def load_spec(path: str | Path) -> dict[str, Any]:
-    return yaml.safe_load(Path(path).read_text())
+    return yaml.safe_load(Path(path).read_text(encoding="utf-8"))

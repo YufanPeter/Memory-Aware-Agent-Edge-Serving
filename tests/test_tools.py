@@ -30,6 +30,20 @@ def test_search_not_found_and_lookup(corpus, item):
     assert tb.lookup("born").text == "No more results."
 
 
+def test_search_miss_returns_closest_text(corpus, item):
+    corpus.text_search = lambda q, n: ["Ed Wood", "Scott Derrickson", "Ed Wood (film)"]
+    obs = ToolBox(corpus, item.sf_set, search_sentences=1).search("filmmaker from Poughkeepsie")
+    assert obs.text == ("Could not find [filmmaker from Poughkeepsie]. Closest result: "
+                        "[Ed Wood] Edward Davis Wood Jr. was an American filmmaker.\n"
+                        "Similar: ['Scott Derrickson', 'Ed Wood (film)'].")
+    assert obs.sf_hits == {("Ed Wood", 0)}
+    long = ToolBox(corpus, item.sf_set, search_sentences=0, neighbors=1).search("filmmaker")
+    assert long.text.count("[") == 4   # two paragraphs shown, one suggestion left
+    tb = ToolBox(corpus, item.sf_set)
+    tb.search("filmmaker from Poughkeepsie")
+    assert tb.lookup("born").text == "(Result 1 / 1) He was born in Poughkeepsie, New York."
+
+
 def test_paragraphs_whole(corpus, item):
     obs = ToolBox(corpus, item.sf_set).paragraphs(["Ed Wood"])
     assert obs.text == "[Ed Wood] Edward Davis Wood Jr. was an American filmmaker. He was born in Poughkeepsie, New York.\n"
