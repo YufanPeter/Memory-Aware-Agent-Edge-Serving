@@ -1,0 +1,7 @@
+# Quality gate: 100 dev questions, react_short only. Run with --k 1.
+name: quality_dev
+split: dev
+n_tasks: 100
+seed: 0
+mix: {react_short: 1.0}
+arrival: {type: batch}

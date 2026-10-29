@@ -1,0 +1,616 @@
+{
+ "meta": {
+  "arrival": {
+   "type": "batch"
+  },
+  "mix": {
+   "react_short": 1.0
+  },
+  "n_tasks": 100,
+  "name": "quality_dev",
+  "seed": 0,
+  "split": "dev"
+ },
+ "tasks": [
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a77c8905542995d831812ce",
+   "task_id": "t0000"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae45adc55429970de88d93f",
+   "task_id": "t0001"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab2f6bd554299166977415e",
+   "task_id": "t0002"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ac51c2855429924173fb5b5",
+   "task_id": "t0003"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7b8f5e554299294a54a9f6",
+   "task_id": "t0004"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae3c0cc5542992f92d82369",
+   "task_id": "t0005"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5abb7d8b5542996cc5e4a006",
+   "task_id": "t0006"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5adbd1d25542994650320bf6",
+   "task_id": "t0007"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7a43245542994f819ef19d",
+   "task_id": "t0008"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae17daa55429901ffe4aea9",
+   "task_id": "t0009"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae382ee5542992e3233c430",
+   "task_id": "t0010"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a8f64605542992414482aaa",
+   "task_id": "t0011"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5aba52e655429939ce03dc94",
+   "task_id": "t0012"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a77685e5542993569682d83",
+   "task_id": "t0013"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5abd0f4b55429933744ab6e3",
+   "task_id": "t0014"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7f3bcd55429930675136c3",
+   "task_id": "t0015"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae731ae5542991bbc9761c1",
+   "task_id": "t0016"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a72af155542992359bc316c",
+   "task_id": "t0017"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae0413555429942ec259c61",
+   "task_id": "t0018"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab1e984554299340b525428",
+   "task_id": "t0019"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab2e9b4554299340b525565",
+   "task_id": "t0020"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae1dac95542997283cd229b",
+   "task_id": "t0021"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae7a8d35542994a481bbdbb",
+   "task_id": "t0022"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae1681b554299422ee9967c",
+   "task_id": "t0023"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7d598d5542995f4f402262",
+   "task_id": "t0024"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7a06525542990198eaf04f",
+   "task_id": "t0025"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5abd14c455429924427fceec",
+   "task_id": "t0026"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5adbfbd555429947ff173893",
+   "task_id": "t0027"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a714dea5542994082a3e7a9",
+   "task_id": "t0028"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab8b02d5542991b5579efdb",
+   "task_id": "t0029"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab472a35542991779162c98",
+   "task_id": "t0030"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7d26fd554299452d57bb2a",
+   "task_id": "t0031"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7a99db55429941d65f26ea",
+   "task_id": "t0032"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ac557975542993e66e8231c",
+   "task_id": "t0033"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae114f155429901ffe4ad5c",
+   "task_id": "t0034"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a8ef1e35542995a26add57a",
+   "task_id": "t0035"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7afdc85542992d025e672e",
+   "task_id": "t0036"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab9379a554299753720f79d",
+   "task_id": "t0037"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab42ae95542991751b4d6c4",
+   "task_id": "t0038"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab66fd355429954757d32b7",
+   "task_id": "t0039"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a84b7db5542991dd0999db0",
+   "task_id": "t0040"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a80799b5542992bc0c4a72e",
+   "task_id": "t0041"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5add3acb5542990dbb2f7ddc",
+   "task_id": "t0042"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5abbfbcf55429965836003cf",
+   "task_id": "t0043"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a734a205542992359bc32e2",
+   "task_id": "t0044"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab235ed5542993be8fa98c8",
+   "task_id": "t0045"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ac471a5554299194317399a",
+   "task_id": "t0046"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae6371155429929b0807af1",
+   "task_id": "t0047"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ac13e195542994ab5c67cc5",
+   "task_id": "t0048"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae2952a5542994d89d5b42b",
+   "task_id": "t0049"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a8b2dc055429950cd6afc62",
+   "task_id": "t0050"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a72f45a5542992359bc31e6",
+   "task_id": "t0051"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a8ee7c95542990e94052bb1",
+   "task_id": "t0052"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a9051615542995651fb5136",
+   "task_id": "t0053"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5abd2cde5542993062266bb1",
+   "task_id": "t0054"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5aba7cb455429901930fa7eb",
+   "task_id": "t0055"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab58ee6554299488d4d99d6",
+   "task_id": "t0056"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab721325542992aa3b8c7a2",
+   "task_id": "t0057"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ac005a15542997719eab6fc",
+   "task_id": "t0058"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7c6753554299683c1c62f9",
+   "task_id": "t0059"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae0fe4e554299422ee995a9",
+   "task_id": "t0060"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7353b35542994cef4bc54f",
+   "task_id": "t0061"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab3b0bf5542992ade7c6e39",
+   "task_id": "t0062"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a88651b55429938390d3f45",
+   "task_id": "t0063"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5abef8fd5542990832d3a111",
+   "task_id": "t0064"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a8fa4d95542995b4424207b",
+   "task_id": "t0065"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a874ce15542996432c57256",
+   "task_id": "t0066"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae62c385542995703ce8b3e",
+   "task_id": "t0067"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5adf9d135542995534e8c817",
+   "task_id": "t0068"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae17f1e5542990adbacf7a6",
+   "task_id": "t0069"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a71446b5542994082a3e72a",
+   "task_id": "t0070"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a829c1d55429966c78a6a67",
+   "task_id": "t0071"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ac46cb85542991943173987",
+   "task_id": "t0072"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7a83b3554299042af8f652",
+   "task_id": "t0073"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7f63645542992e7d278cf1",
+   "task_id": "t0074"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a74d64055429916b0164223",
+   "task_id": "t0075"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab43179554299233955004d",
+   "task_id": "t0076"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a847e0a5542990548d0b2c3",
+   "task_id": "t0077"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a84edf65542994c784dda8d",
+   "task_id": "t0078"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab4e3065542990594ba9cb4",
+   "task_id": "t0079"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a8332815542993344745fe9",
+   "task_id": "t0080"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a81778355429926c1cdad2e",
+   "task_id": "t0081"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a8db788554299653c1aa145",
+   "task_id": "t0082"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a8a13f45542992d82986e9e",
+   "task_id": "t0083"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a8ce55f554299441c6b9f62",
+   "task_id": "t0084"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7ed5af5542994959419a84",
+   "task_id": "t0085"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab808b85542991d3222380d",
+   "task_id": "t0086"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ade3b925542992fa25da70a",
+   "task_id": "t0087"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7f85505542995d8a8dde95",
+   "task_id": "t0088"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a905cea55429933b8a204f4",
+   "task_id": "t0089"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a77769e5542997042120a65",
+   "task_id": "t0090"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a85d4395542996432c570f5",
+   "task_id": "t0091"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ab94bc2554299743d22eacf",
+   "task_id": "t0092"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a7bcd68554299294a54aaf0",
+   "task_id": "t0093"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae3f0c85542995ad6573cb1",
+   "task_id": "t0094"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a74bc1555429929fddd84dd",
+   "task_id": "t0095"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae0a2c75542993d6555ebcf",
+   "task_id": "t0096"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae5669755429960a22e02ec",
+   "task_id": "t0097"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5a9092cc55429916514e74fd",
+   "task_id": "t0098"
+  },
+  {
+   "arrival_s": 0.0,
+   "profile": "react_short",
+   "qid": "5ae5ff845542996de7b71ad0",
+   "task_id": "t0099"
+  }
+ ]
+}
