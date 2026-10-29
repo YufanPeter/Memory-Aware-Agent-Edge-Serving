@@ -128,14 +128,14 @@ Measured on llama.cpp build b11960 (Mac, Metal):
 
 ## Windows (native) setup notes
 
-- Repo lives at `C:\Users\shiyu\dev\Memory-Aware-Agent-Edge-Serving`, outside OneDrive (models
-  and results must not sync). `.gitattributes` forces LF everywhere; keep it.
+- Repo lives at `D:\Memory-Aware-Agent-Edge-Serving` (D: is the coding drive; never OneDrive,
+  models and results must not sync). `.gitattributes` forces LF everywhere; keep it.
 - Python via `uv` (winget `astral-sh.uv`); `hf` via `uv tool install "huggingface_hub[cli]"`.
   Run the bash scripts from Git Bash. All text I/O passes `encoding="utf-8"` and writes `\n`
   (the Windows default is cp936 + CRLF); keep that in new code. Server RSS uses `psutil`.
 - llama.cpp: the official **b11960** `win-cuda-12.4-x64` release plus its cudart zip, unpacked
-  to `C:\Users\shiyu\dev\llama.cpp-b11960` (driver supports CUDA ≤ 13.3). Point
-  `start_server.sh` at it with `LLAMA_SERVER=/c/Users/shiyu/dev/llama.cpp-b11960/llama-server.exe`.
+  to `D:\llama.cpp-b11960` (driver supports CUDA ≤ 13.3). Point `start_server.sh` at it
+  with `LLAMA_SERVER=/d/llama.cpp-b11960/llama-server.exe`.
 - The GPU also drives the display: 1.1–2.5 GB is used before the server starts, depending on
   what else is open. That leaves at most ~32k usable KV tokens for 7B, not 56k (see below).
 - In the NVIDIA Control Panel, set "CUDA - Sysmem Fallback Policy" to "Prefer No Sysmem

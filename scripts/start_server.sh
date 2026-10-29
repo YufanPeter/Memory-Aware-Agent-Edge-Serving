@@ -6,7 +6,7 @@
 #   PORT      (default: 8080)
 #   EXTRA     extra flags appended verbatim
 #   LLAMA_SERVER  llama-server binary (default: llama-server on PATH; on Windows Git Bash,
-#                 e.g. /c/Users/<you>/dev/llama.cpp-b11960/llama-server.exe)
+#                 e.g. /d/llama.cpp-b11960/llama-server.exe)
 #
 # --cache-ram 0 turns off the host-RAM prompt cache so KV memory is only the GPU pool.
 # --kv-unified makes all slots share one KV pool of CTX tokens (the memory budget).
