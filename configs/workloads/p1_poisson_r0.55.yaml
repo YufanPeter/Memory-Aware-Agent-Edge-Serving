@@ -1,0 +1,8 @@
+# Phase 1 open-loop point (E1): 200 perf-split questions, mixed profiles, Poisson at 0.55 tasks/s
+# (33 tasks/min; closed-loop capacity at the best fixed K=8 is ~45 tasks/min).
+name: p1_poisson_r0.55
+split: perf
+n_tasks: 200
+seed: 0
+mix: {react_short: 0.4, react_long: 0.3, react_explain: 0.2, oneshot_long: 0.1}
+arrival: {type: poisson, rate: 0.55}

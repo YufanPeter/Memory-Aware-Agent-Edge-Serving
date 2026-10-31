@@ -1,0 +1,7 @@
+# Phase 1 budget sweep (E2): long-context-heavy mix, 200 perf-split questions at t=0.
+name: p1_long_200
+split: perf
+n_tasks: 200
+seed: 0
+mix: {react_long: 0.7, react_short: 0.3}
+arrival: {type: batch}

@@ -1,0 +1,8 @@
+# Phase 1 closed-loop sweep (E1/E3/E4): 320 perf-split questions, mixed profiles, all arriving
+# at t=0, so the K workers stay busy (closed loop with K concurrent agents).
+name: p1_mixed_320
+split: perf
+n_tasks: 320
+seed: 0
+mix: {react_short: 0.4, react_long: 0.3, react_explain: 0.2, oneshot_long: 0.1}
+arrival: {type: batch}

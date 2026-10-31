@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import random
 import re
+import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -56,7 +57,7 @@ class TaskTrace:
     profile: str
     qtype: str
     slot: int
-    status: str = "ok"              # ok | forced | parse_fail | ctx_overflow | llm_error
+    status: str = "ok"              # ok | forced | parse_fail | ctx_overflow | llm_error | timeout | error
     prediction: str = ""
     error: str | None = None
     steps: list[StepRecord] = field(default_factory=list)
@@ -110,7 +111,8 @@ class Agent:
             p.add("shared_prefix", CHATML["system"].format(content=ONESHOT_RULES) + CHATML["user_open"] + "Context:\n")
             titles = [t for t in item.titles if t in self.corpus.docs]
             if profile.extra_paragraphs > 0:   # longer context: BM25 distractors, order fixed per question
-                hits = self.corpus.text_search(item.question, profile.extra_paragraphs + len(titles))
+                hits = await asyncio.to_thread(self.corpus.text_search, item.question,
+                                               profile.extra_paragraphs + len(titles))
                 titles += [t for t in hits if t not in titles][:profile.extra_paragraphs]
                 random.Random(item.id).shuffle(titles)
             ctx = tools.paragraphs(titles)
@@ -164,11 +166,16 @@ class Agent:
                 return
             rec.tool_delay_s = delays.sample(rec.action, self.seed, trace.task_id, n)
             self.events.emit("tool_start", task_id=trace.task_id, step=n, tool=rec.action, delay_s=rec.tool_delay_s)
-            await asyncio.sleep(rec.tool_delay_s)
-            obs = tools.call(rec.action, rec.arg)
+            # The tool's own compute (BM25, fuzzy title match) runs in a thread, overlapped with
+            # the seeded delay: it does not block other agents, and the idle gap is
+            # max(delay, compute) instead of delay + compute.
+            t_tool = time.monotonic()
+            obs, _ = await asyncio.gather(asyncio.to_thread(tools.call, rec.action, rec.arg),
+                                          asyncio.sleep(rec.tool_delay_s))
             rec.obs_chars = len(obs.text)
             trace.sf_seen |= obs.sf_hits
-            self.events.emit("tool_end", task_id=trace.task_id, step=n, tool=rec.action, obs_chars=rec.obs_chars)
+            self.events.emit("tool_end", task_id=trace.task_id, step=n, tool=rec.action, obs_chars=rec.obs_chars,
+                             idle_s=round(time.monotonic() - t_tool, 4))
             p.add("control", f"\nObservation {n}: ")
             p.extend(obs.pieces)
         else:

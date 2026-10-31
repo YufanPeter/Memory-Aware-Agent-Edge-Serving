@@ -1,0 +1,457 @@
+{
+  "assumptions": {
+    "hardware": [
+      {
+        "name": "A10G 24GB (g5.xlarge)",
+        "mem_bytes": 25769803776,
+        "mem_bw": 600000000000.0,
+        "peak_flops": 125000000000000.0,
+        "bw_eff": 0.7,
+        "flops_eff": 0.3,
+        "overhead_bytes": 1610612736.0,
+        "host_link_bw": 25000000000.0
+      },
+      {
+        "name": "M1 Pro 16-core GPU, 16GB",
+        "mem_bytes": 11489037516.8,
+        "mem_bw": 200000000000.0,
+        "peak_flops": 5200000000000.0,
+        "bw_eff": 0.7,
+        "flops_eff": 0.5,
+        "overhead_bytes": 1073741824.0,
+        "host_link_bw": null
+      }
+    ],
+    "models": [
+      {
+        "name": "Qwen2.5-7B Q4_K_M",
+        "n_layers": 28,
+        "n_q_heads": 28,
+        "n_kv_heads": 4,
+        "head_dim": 128,
+        "n_params": 7620000000.0,
+        "weight_bytes": 4680000000.0
+      },
+      {
+        "name": "Qwen2.5-3B Q4_K_M",
+        "n_layers": 36,
+        "n_q_heads": 16,
+        "n_kv_heads": 2,
+        "head_dim": 128,
+        "n_params": 3090000000.0,
+        "weight_bytes": 1930000000.0
+      },
+      {
+        "name": "Qwen2.5-1.5B Q4_K_M",
+        "n_layers": 28,
+        "n_q_heads": 12,
+        "n_kv_heads": 2,
+        "head_dim": 128,
+        "n_params": 1540000000.0,
+        "weight_bytes": 1100000000.0
+      }
+    ]
+  },
+  "predictions": [
+    {
+      "hardware": "A10G 24GB (g5.xlarge)",
+      "model": "Qwen2.5-7B Q4_K_M",
+      "kv_type": "f16",
+      "kv_bytes_per_token": 57344.0,
+      "kv_budget_gib": 18.14141035079956,
+      "max_resident_tokens": 339690,
+      "profiles": {
+        "react_short": {
+          "ctx_tokens": 2289,
+          "kv_mb_per_agent": 131.260416,
+          "max_resident_agents": 148,
+          "ridge_batch": 95,
+          "memory_binds_first": false,
+          "idle_fraction_b1": 0.6408960241853795,
+          "ideal_offload_headroom": 1.2131933830701316,
+          "decode_tok_s_by_batch": {
+            "1": 87,
+            "4": 323,
+            "8": 586,
+            "16": 991,
+            "32": 1513,
+            "64": 2055
+          },
+          "reprefill_s": 0.95829207527424,
+          "offload_roundtrip_s": 0.01050083328,
+          "tool_median_s": 0.8
+        },
+        "react_long": {
+          "ctx_tokens": 8000,
+          "kv_mb_per_agent": 458.752,
+          "max_resident_agents": 42,
+          "ridge_batch": null,
+          "memory_binds_first": true,
+          "idle_fraction_b1": 0.6264178338626659,
+          "ideal_offload_headroom": 1.317568569756348,
+          "decode_tok_s_by_batch": {
+            "1": 82,
+            "4": 258,
+            "8": 402,
+            "16": 559,
+            "32": 694,
+            "64": 790
+          },
+          "reprefill_s": 3.5937348266666667,
+          "offload_roundtrip_s": 0.03670016,
+          "tool_median_s": 0.8
+        }
+      }
+    },
+    {
+      "hardware": "A10G 24GB (g5.xlarge)",
+      "model": "Qwen2.5-7B Q4_K_M",
+      "kv_type": "q8_0",
+      "kv_bytes_per_token": 30464.0,
+      "kv_budget_gib": 18.14141035079956,
+      "max_resident_tokens": 639416,
+      "profiles": {
+        "react_short": {
+          "ctx_tokens": 2289,
+          "kv_mb_per_agent": 69.732096,
+          "max_resident_agents": 279,
+          "ridge_batch": 43,
+          "memory_binds_first": false,
+          "idle_fraction_b1": 0.6436911581325269,
+          "ideal_offload_headroom": 1.0,
+          "decode_tok_s_by_batch": {
+            "1": 88,
+            "4": 339,
+            "8": 641,
+            "16": 1159,
+            "32": 1945,
+            "64": 2321
+          },
+          "reprefill_s": 0.95829207527424,
+          "offload_roundtrip_s": 0.00557856768,
+          "tool_median_s": 0.8
+        },
+        "react_long": {
+          "ctx_tokens": 8000,
+          "kv_mb_per_agent": 243.712,
+          "max_resident_agents": 79,
+          "ridge_batch": null,
+          "memory_binds_first": true,
+          "idle_fraction_b1": 0.6358497585027851,
+          "ideal_offload_headroom": 1.337144608088354,
+          "decode_tok_s_by_batch": {
+            "1": 85,
+            "4": 297,
+            "8": 507,
+            "16": 783,
+            "32": 1077,
+            "64": 1326
+          },
+          "reprefill_s": 3.5937348266666667,
+          "offload_roundtrip_s": 0.01949696,
+          "tool_median_s": 0.8
+        }
+      }
+    },
+    {
+      "hardware": "M1 Pro 16-core GPU, 16GB",
+      "model": "Qwen2.5-7B Q4_K_M",
+      "kv_type": "f16",
+      "kv_bytes_per_token": 57344.0,
+      "kv_budget_gib": 5.34141035079956,
+      "max_resident_tokens": 100015,
+      "profiles": {
+        "react_short": {
+          "ctx_tokens": 2289,
+          "kv_mb_per_agent": 131.260416,
+          "max_resident_agents": 43,
+          "ridge_batch": 7,
+          "memory_binds_first": false,
+          "idle_fraction_b1": 0.3300986960463306,
+          "ideal_offload_headroom": 1.0000000000000002,
+          "decode_tok_s_by_batch": {
+            "1": 29,
+            "4": 108,
+            "8": 161,
+            "16": 161,
+            "32": 161,
+            "64": 161
+          },
+          "reprefill_s": 13.821520316455384,
+          "offload_roundtrip_s": null,
+          "tool_median_s": 0.8
+        },
+        "react_long": {
+          "ctx_tokens": 8000,
+          "kv_mb_per_agent": 458.752,
+          "max_resident_agents": 12,
+          "ridge_batch": 9,
+          "memory_binds_first": false,
+          "idle_fraction_b1": 0.31871634462923704,
+          "ideal_offload_headroom": 1.050549475325144,
+          "decode_tok_s_by_batch": {
+            "1": 27,
+            "4": 86,
+            "8": 134,
+            "16": 141,
+            "32": 141,
+            "64": 141
+          },
+          "reprefill_s": 51.832713846153844,
+          "offload_roundtrip_s": null,
+          "tool_median_s": 0.8
+        }
+      }
+    },
+    {
+      "hardware": "M1 Pro 16-core GPU, 16GB",
+      "model": "Qwen2.5-7B Q4_K_M",
+      "kv_type": "q8_0",
+      "kv_bytes_per_token": 30464.0,
+      "kv_budget_gib": 5.34141035079956,
+      "max_resident_tokens": 188264,
+      "profiles": {
+        "react_short": {
+          "ctx_tokens": 2289,
+          "kv_mb_per_agent": 69.732096,
+          "max_resident_agents": 82,
+          "ridge_batch": 6,
+          "memory_binds_first": false,
+          "idle_fraction_b1": 0.3323285179540326,
+          "ideal_offload_headroom": 1.0,
+          "decode_tok_s_by_batch": {
+            "1": 29,
+            "4": 113,
+            "8": 161,
+            "16": 161,
+            "32": 161,
+            "64": 161
+          },
+          "reprefill_s": 13.821520316455384,
+          "offload_roundtrip_s": null,
+          "tool_median_s": 0.8
+        },
+        "react_long": {
+          "ctx_tokens": 8000,
+          "kv_mb_per_agent": 243.712,
+          "max_resident_agents": 23,
+          "ridge_batch": 7,
+          "memory_binds_first": false,
+          "idle_fraction_b1": 0.32609976811379476,
+          "ideal_offload_headroom": 1.0000000000000002,
+          "decode_tok_s_by_batch": {
+            "1": 28,
+            "4": 99,
+            "8": 141,
+            "16": 141,
+            "32": 141,
+            "64": 141
+          },
+          "reprefill_s": 51.832713846153844,
+          "offload_roundtrip_s": null,
+          "tool_median_s": 0.8
+        }
+      }
+    },
+    {
+      "hardware": "M1 Pro 16-core GPU, 16GB",
+      "model": "Qwen2.5-3B Q4_K_M",
+      "kv_type": "f16",
+      "kv_bytes_per_token": 36864.0,
+      "kv_budget_gib": 7.902547430992126,
+      "max_resident_tokens": 230178,
+      "profiles": {
+        "react_short": {
+          "ctx_tokens": 2289,
+          "kv_mb_per_agent": 84.381696,
+          "max_resident_agents": 100,
+          "ridge_batch": 7,
+          "memory_binds_first": false,
+          "idle_fraction_b1": 0.5423023416700403,
+          "ideal_offload_headroom": 0.9999999999999999,
+          "decode_tok_s_by_batch": {
+            "1": 70,
+            "4": 247,
+            "8": 379,
+            "16": 379,
+            "32": 379,
+            "64": 379
+          },
+          "reprefill_s": 5.7379303109907696,
+          "offload_roundtrip_s": null,
+          "tool_median_s": 0.8
+        },
+        "react_long": {
+          "ctx_tokens": 8000,
+          "kv_mb_per_agent": 294.912,
+          "max_resident_agents": 28,
+          "ridge_batch": 12,
+          "memory_binds_first": false,
+          "idle_fraction_b1": 0.5225916324819705,
+          "ideal_offload_headroom": 1.0,
+          "decode_tok_s_by_batch": {
+            "1": 63,
+            "4": 180,
+            "8": 261,
+            "16": 304,
+            "32": 304,
+            "64": 304
+          },
+          "reprefill_s": 22.64507076923077,
+          "offload_roundtrip_s": null,
+          "tool_median_s": 0.8
+        }
+      }
+    },
+    {
+      "hardware": "M1 Pro 16-core GPU, 16GB",
+      "model": "Qwen2.5-3B Q4_K_M",
+      "kv_type": "q8_0",
+      "kv_bytes_per_token": 19584.0,
+      "kv_budget_gib": 7.902547430992126,
+      "max_resident_tokens": 433276,
+      "profiles": {
+        "react_short": {
+          "ctx_tokens": 2289,
+          "kv_mb_per_agent": 44.827776,
+          "max_resident_agents": 189,
+          "ridge_batch": 6,
+          "memory_binds_first": false,
+          "idle_fraction_b1": 0.5461726418863256,
+          "ideal_offload_headroom": 1.0000000000000002,
+          "decode_tok_s_by_batch": {
+            "1": 71,
+            "4": 265,
+            "8": 379,
+            "16": 379,
+            "32": 379,
+            "64": 379
+          },
+          "reprefill_s": 5.7379303109907696,
+          "offload_roundtrip_s": null,
+          "tool_median_s": 0.8
+        },
+        "react_long": {
+          "ctx_tokens": 8000,
+          "kv_mb_per_agent": 156.672,
+          "max_resident_agents": 54,
+          "ridge_batch": 7,
+          "memory_binds_first": false,
+          "idle_fraction_b1": 0.5353687501923106,
+          "ideal_offload_headroom": 1.0,
+          "decode_tok_s_by_batch": {
+            "1": 67,
+            "4": 219,
+            "8": 304,
+            "16": 304,
+            "32": 304,
+            "64": 304
+          },
+          "reprefill_s": 22.64507076923077,
+          "offload_roundtrip_s": null,
+          "tool_median_s": 0.8
+        }
+      }
+    },
+    {
+      "hardware": "M1 Pro 16-core GPU, 16GB",
+      "model": "Qwen2.5-1.5B Q4_K_M",
+      "kv_type": "f16",
+      "kv_bytes_per_token": 28672.0,
+      "kv_budget_gib": 8.675545167922973,
+      "max_resident_tokens": 324891,
+      "profiles": {
+        "react_short": {
+          "ctx_tokens": 2289,
+          "kv_mb_per_agent": 65.630208,
+          "max_resident_agents": 141,
+          "ridge_batch": 10,
+          "memory_binds_first": false,
+          "idle_fraction_b1": 0.6783941602071099,
+          "ideal_offload_headroom": 1.0,
+          "decode_tok_s_by_batch": {
+            "1": 120,
+            "4": 411,
+            "8": 689,
+            "16": 748,
+            "32": 748,
+            "64": 748
+          },
+          "reprefill_s": 2.8849240916676924,
+          "offload_roundtrip_s": null,
+          "tool_median_s": 0.8
+        },
+        "react_long": {
+          "ctx_tokens": 8000,
+          "kv_mb_per_agent": 229.376,
+          "max_resident_agents": 40,
+          "ridge_batch": 105,
+          "memory_binds_first": true,
+          "idle_fraction_b1": 0.6543800765896682,
+          "ideal_offload_headroom": 1.1988174394315878,
+          "decode_tok_s_by_batch": {
+            "1": 105,
+            "4": 278,
+            "8": 382,
+            "16": 470,
+            "32": 531,
+            "64": 568
+          },
+          "reprefill_s": 11.59424,
+          "offload_roundtrip_s": null,
+          "tool_median_s": 0.8
+        }
+      }
+    },
+    {
+      "hardware": "M1 Pro 16-core GPU, 16GB",
+      "model": "Qwen2.5-1.5B Q4_K_M",
+      "kv_type": "q8_0",
+      "kv_bytes_per_token": 15232.0,
+      "kv_budget_gib": 8.675545167922973,
+      "max_resident_tokens": 611560,
+      "profiles": {
+        "react_short": {
+          "ctx_tokens": 2289,
+          "kv_mb_per_agent": 34.866048,
+          "max_resident_agents": 267,
+          "ridge_batch": 8,
+          "memory_binds_first": false,
+          "idle_fraction_b1": 0.6831039078054054,
+          "ideal_offload_headroom": 1.0,
+          "decode_tok_s_by_batch": {
+            "1": 123,
+            "4": 452,
+            "8": 748,
+            "16": 748,
+            "32": 748,
+            "64": 748
+          },
+          "reprefill_s": 2.8849240916676924,
+          "offload_roundtrip_s": null,
+          "tool_median_s": 0.8
+        },
+        "react_long": {
+          "ctx_tokens": 8000,
+          "kv_mb_per_agent": 121.856,
+          "max_resident_agents": 76,
+          "ridge_batch": 10,
+          "memory_binds_first": false,
+          "idle_fraction_b1": 0.6699521635131556,
+          "ideal_offload_headroom": 1.0,
+          "decode_tok_s_by_batch": {
+            "1": 115,
+            "4": 353,
+            "8": 540,
+            "16": 583,
+            "32": 583,
+            "64": 583
+          },
+          "reprefill_s": 11.59424,
+          "offload_roundtrip_s": null,
+          "tool_median_s": 0.8
+        }
+      }
+    }
+  ]
+}

@@ -8,3 +8,12 @@ models/
 results/
 *.pem
 .DS_Store
+REVISION
+
+# LaTeX build artifacts
+docs/**/*.aux
+docs/**/*.log
+docs/**/*.fls
+docs/**/*.fdb_latexmk
+docs/**/*.out
+docs/phase1/report.pdf

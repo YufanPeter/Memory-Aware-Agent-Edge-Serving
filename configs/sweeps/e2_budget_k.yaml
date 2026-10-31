@@ -1,0 +1,10 @@
+# E2b: at budgets where K=16 fails (e2_budget), how far must K drop before runs complete?
+# Gives the best safe fixed K per budget, the baseline Phase 2 must beat when memory binds.
+name: e2_budget_k
+defaults: {parallel: 64, workload: workloads/p1_long_200.json, delay_scale: 1.0}
+points:
+  - {name: c8k_k2, ctx: 8192, k: 2}
+  - {name: c8k_k4, ctx: 8192, k: 4}
+  - {name: c16k_k4, ctx: 16384, k: 4}
+  - {name: c16k_k8, ctx: 16384, k: 8}
+  - {name: c32k_k8, ctx: 32768, k: 8}

@@ -1,8 +1,10 @@
-"""Freeze dev/test splits from the validation set, stratified by question type.
+"""Freeze dev/test/perf splits from the validation set, stratified by question type.
 
-    uv run python -m scripts.build_splits [--dev 200] [--test 500] [--seed 0]
+    uv run python -m scripts.build_splits [--dev 200] [--test 500] [--perf 1500] [--seed 0]
 
-dev is for tuning (prompts, best fixed K); test is only for the final report.
+dev is for tuning (prompts, best fixed K); test is only for the final report. perf is
+for performance sweeps that need more tasks than dev has (n >= 10 K at high K); it is
+drawn after dev and test, so those two stay byte-identical to earlier builds.
 """
 from __future__ import annotations
 
@@ -30,6 +32,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dev", type=int, default=200)
     ap.add_argument("--test", type=int, default=500)
+    ap.add_argument("--perf", type=int, default=1500)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
@@ -38,10 +41,13 @@ def main() -> None:
     dev = stratified(items, args.dev, rng)
     dev_ids = {it.id for it in dev}
     test = stratified([it for it in items if it.id not in dev_ids], args.test, rng)
+    used = dev_ids | {it.id for it in test}
+    perf = stratified([it for it in items if it.id not in used], args.perf, rng)
 
     save_split(dev, SPLIT_DIR / "dev.jsonl")
     save_split(test, SPLIT_DIR / "test.jsonl")
-    for name, s in [("dev", dev), ("test", test)]:
+    save_split(perf, SPLIT_DIR / "perf.jsonl")
+    for name, s in [("dev", dev), ("test", test), ("perf", perf)]:
         n_cmp = sum(it.qtype == "comparison" for it in s)
         print(f"{name}: {len(s)} items ({n_cmp} comparison)")
 

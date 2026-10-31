@@ -1,0 +1,7 @@
+# E3: idle periods. Tool-delay scale 0 (no waiting) and 4 (median 3.2 s) at K=16; scale 1 is
+# e1_concurrency/k16 (same configuration), reused rather than rerun.
+name: e3_delay
+defaults: {ctx: 131072, parallel: 64, k: 16, workload: workloads/p1_mixed_200.json}
+points:
+  - {name: d0, delay_scale: 0.0}
+  - {name: d4, delay_scale: 4.0}

@@ -1,0 +1,9 @@
+# E2: KV budget sweep at K=16 on a long-context-heavy mix: where queueing, eviction and
+# failures start as -c shrinks below what 16 retained agents need.
+name: e2_budget
+defaults: {parallel: 64, k: 16, workload: workloads/p1_long_200.json, delay_scale: 1.0}
+points:
+  - {name: c8k, ctx: 8192}
+  - {name: c16k, ctx: 16384}
+  - {name: c32k, ctx: 32768}
+  - {name: c64k, ctx: 65536}

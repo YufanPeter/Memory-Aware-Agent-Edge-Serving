@@ -54,8 +54,9 @@ def mock_script(prompt: str) -> str:
 def _git_rev() -> str:
     try:
         return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL).strip()
-    except Exception:
-        return "unknown"
+    except Exception:   # rsynced copy without .git: tools/mem_aws.sh push writes REVISION
+        rev = Path("REVISION")
+        return rev.read_text(encoding="utf-8").strip() if rev.exists() else "unknown"
 
 
 async def _monitor(events: EventLog, base_url: str | None, server_pid: int | None,
@@ -65,9 +66,11 @@ async def _monitor(events: EventLog, base_url: str | None, server_pid: int | Non
     client = httpx.AsyncClient(timeout=2.0) if base_url else None
     while not stop.is_set():
         s: dict[str, Any] = {}
-        if has_smi:
-            out = subprocess.run(["nvidia-smi", "--query-gpu=memory.used,utilization.gpu",
-                                  "--format=csv,noheader,nounits"], capture_output=True, text=True).stdout
+        if has_smi:   # async subprocess: a blocking call here would stall every agent's stream
+            proc = await asyncio.create_subprocess_exec(
+                "nvidia-smi", "--query-gpu=memory.used,utilization.gpu", "--format=csv,noheader,nounits",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+            out = (await proc.communicate())[0].decode()
             if out.strip():
                 mem, util = out.strip().splitlines()[0].split(",")
                 s["gpu_mem_mib"], s["gpu_util"] = float(mem), float(util)
@@ -94,21 +97,56 @@ async def _monitor(events: EventLog, base_url: str | None, server_pid: int | Non
         await client.aclose()
 
 
+def _quantile(xs: list[float], p: float) -> float | None:
+    xs = sorted(xs)
+    return xs[min(len(xs) - 1, int(p * len(xs)))] if xs else None
+
+
+def _req_sum(row: dict[str, Any], key: str) -> int:
+    return sum(int(s["llm"].get(key) or 0) for s in row["trace"]["steps"])
+
+
 def summarize(rows: list[dict[str, Any]], makespan: float) -> dict[str, Any]:
-    lat = sorted(r["latency_s"] for r in rows)
-    q = lambda p: lat[min(len(lat) - 1, int(p * len(lat)))] if lat else None  # noqa: E731
+    lat = [r["latency_s"] for r in rows]
     statuses: dict[str, int] = {}
     for r in rows:
         statuses[r["status"]] = statuses.get(r["status"], 0) + 1
     answered = [r for r in rows if r["status"] in ("ok", "forced", "parse_fail")]
     mean = lambda k: round(statistics.mean(r[k] for r in rows), 4) if rows else None  # noqa: E731
+
+    # Steady state: completions between the 10th and 90th percentile completion time, so the
+    # ramp-up and the drain tail (a few long tasks finishing alone) do not set the rate.
+    done = sorted(r["arrival_s"] + r["latency_s"] for r in answered)
+    steady: dict[str, Any] = {"steady_window_s": None, "steady_throughput_per_min": None,
+                              "steady_goodput_per_min": None}
+    if len(done) >= 10 and done[(9 * len(done)) // 10] > done[len(done) // 10]:
+        lo, hi = done[len(done) // 10], done[(9 * len(done)) // 10]
+        win = [r for r in answered if lo <= r["arrival_s"] + r["latency_s"] <= hi]
+        steady = {"steady_window_s": round(hi - lo, 3),
+                  "steady_throughput_per_min": round(60 * len(win) / (hi - lo), 3),
+                  "steady_goodput_per_min": round(60 * sum(r["em"] for r in win) / (hi - lo), 3)}
+    # Tail latency without the first and last 10% of arrivals (open-loop warm-up and drain).
+    by_arrival = sorted(rows, key=lambda r: r["arrival_s"])
+    trim = by_arrival[len(rows) // 10: len(rows) - len(rows) // 10] or by_arrival
+    prompt_n = sum(_req_sum(r, "prompt_n") for r in rows)
+    cache_n = sum(_req_sum(r, "cache_n") for r in rows)
     return {
         "n_tasks": len(rows), "statuses": statuses, "completed": len(answered),
+        "failed": len(rows) - len(answered),
         "makespan_s": round(makespan, 3),
         "throughput_tasks_per_min": round(60 * len(answered) / makespan, 3) if makespan else None,
-        "latency_p50_s": q(0.5), "latency_p95_s": q(0.95), "latency_p99_s": q(0.99),
-        "queue_wait_mean_s": mean("queue_wait_s"), "em": mean("em"), "f1": mean("f1"),
-        "sf_recall": mean("sf_recall"), "steps_mean": mean("n_llm_calls"),
+        "goodput_tasks_per_min": round(60 * sum(r["em"] for r in answered) / makespan, 3) if makespan else None,
+        **steady,
+        "latency_p50_s": _quantile(lat, 0.5), "latency_p95_s": _quantile(lat, 0.95),
+        "latency_p99_s": _quantile(lat, 0.99),
+        "latency_trim_p50_s": _quantile([r["latency_s"] for r in trim], 0.5),
+        "latency_trim_p95_s": _quantile([r["latency_s"] for r in trim], 0.95),
+        "queue_wait_mean_s": mean("queue_wait_s"),
+        "queue_wait_p95_s": _quantile([r["queue_wait_s"] for r in rows], 0.95),
+        "em": mean("em"), "f1": mean("f1"), "sf_recall": mean("sf_recall"), "steps_mean": mean("n_llm_calls"),
+        "decode_tokens_mean": round(statistics.mean(_req_sum(r, "predicted_n") for r in rows), 1) if rows else None,
+        "prefill_tokens_total": prompt_n, "cached_tokens_total": cache_n,
+        "cache_hit_rate": round(cache_n / (prompt_n + cache_n), 4) if prompt_n + cache_n else None,
     }
 
 
@@ -159,6 +197,9 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                                                args.task_timeout)
             except asyncio.TimeoutError:
                 trace = TaskTrace(t["task_id"], item.id, t["profile"], item.qtype, slot, status="timeout")
+            except Exception as e:   # one broken task must not abort the whole run
+                trace = TaskTrace(t["task_id"], item.id, t["profile"], item.qtype, slot, status="error",
+                                  error=f"{type(e).__name__}: {e}"[:500])
             t_done = time.monotonic()
             row = {
                 "task_id": t["task_id"], "qid": item.id, "profile": t["profile"], "qtype": item.qtype,
@@ -196,6 +237,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         "git_rev": _git_rev(), "host": platform.node(), "platform": platform.platform(),
         "started_wall": events.wall0,
     }
+    if (out / "server_cmd.txt").exists():   # written by scripts/sweep.py or start_server.sh
+        meta["server_cmd"] = (out / "server_cmd.txt").read_text(encoding="utf-8").strip()
     (out / "meta.json").write_text(json.dumps(meta, indent=1, default=str), encoding="utf-8", newline="\n")
     summary = summarize(rows, makespan)
     (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8", newline="\n")

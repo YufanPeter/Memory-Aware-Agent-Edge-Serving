@@ -1,0 +1,8 @@
+# E1 (open loop): Poisson arrivals at the best fixed K (8, from e1_concurrency), at rates of
+# roughly 45%, 70% and 100% of its closed-loop capacity (~45 tasks/min).
+name: e1_poisson
+defaults: {ctx: 131072, parallel: 64, k: 8, delay_scale: 1.0}
+points:
+  - {name: r0.35, workload: workloads/p1_poisson_r0.35.json}
+  - {name: r0.55, workload: workloads/p1_poisson_r0.55.json}
+  - {name: r0.75, workload: workloads/p1_poisson_r0.75.json}

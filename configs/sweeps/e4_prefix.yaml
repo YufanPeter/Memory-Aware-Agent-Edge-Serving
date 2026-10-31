@@ -1,0 +1,9 @@
+# E4: does retained context / prefix reuse matter? cache_prompt on/off x pinned slots vs
+# llama.cpp's own slot choice (-np = K), K=8, 6 few-shot examples. pin+cache is
+# e1_concurrency/k8 (same configuration), reused rather than rerun.
+name: e4_prefix
+defaults: {ctx: 131072, k: 8, workload: workloads/p1_mixed_200.json, delay_scale: 1.0}
+points:
+  - {name: pin_nocache, parallel: 64, pin: true, cache: false}
+  - {name: nopin_cache, parallel: k, pin: false, cache: true}
+  - {name: nopin_nocache, parallel: k, pin: false, cache: false}
