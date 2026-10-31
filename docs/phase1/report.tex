@@ -16,153 +16,182 @@
 \large Phase 1: Baseline and Bottleneck Characterization}
 
 \author{\IEEEauthorblockN{Jiawei Liu, Kaiqi Han, Tianyu Xu, You Chen, Yufan Shi}
-\IEEEauthorblockA{University of California San Diego \quad CSE 291A, Fall 2026}}
+\IEEEauthorblockA{CSE 291A, Fall 2026}}
 
 \maketitle
 
-\begin{abstract}
-We characterize what limits completed work when tool-using agents share one GPU under a bounded KV
-budget. Across 29 runs (5,890 tasks) of HotpotQA ReAct agents on llama.cpp, we find two regimes. With
-ample memory, throughput peaks at 8 concurrent agents and then declines, because attention cost in the
-unified KV pool grows with all resident tokens. Under a tight budget, over-commitment fails every
-in-flight request and contexts grow 2--4$\times$ per task, so safe concurrency falls far below the
-compute optimum while a quarter of the pool is held by agents waiting on tools.
-\end{abstract}
+\section{Problem and Setup}
 
-\section{Introduction}
+ReAct agents~\cite{react} alternate LLM calls with tool calls; while a tool runs, the agent's KV cache
+stays resident and its context grows with every step. Phase~1 asks which resource limits completed work
+when such agents share one GPU under a bounded KV budget: (a) KV capacity for active requests, (b) KV
+held by agents idle in tool calls, (c) re-prefill after the runtime evicts a context, or (d) the GPU
+itself when memory does not bind.
 
-Agent tasks issue several dependent requests whose context grows with every step, and between requests
-the agent waits on a tool while its KV cache remains resident. On a memory-constrained device, admitting
-too many agents exhausts the KV budget; admitting too few leaves the accelerator idle.
+We serve Qwen2.5-7B-Instruct~\cite{qwen} (Q4\_K\_M, f16 KV) with \texttt{llama-server}~\cite{llamacpp}
+b11960 on an NVIDIA A10G. The KV budget is the unified pool shared by all slots (\texttt{-c}). The
+baseline admits tasks in FIFO order to \K{} workers; worker $k$ pins slot $k$, so an agent's KV stays
+resident through its tool calls (always retain). We log per-request tokens and timings, tool waits, and
+per-task latency, queueing, and EM/F1, and reconstruct per-slot KV occupancy, attributed to agents in a
+request, idle in a tool call, or finished. Throughput is measured between the 10th and 90th percentile
+completion. In total we ran 29 configurations over 5,890 tasks. A sweep driver restarts the server for every
+run, and each run records the server command line, build, workload hash, and code revision; workloads,
+sweep definitions, and analysis scripts are in the project repository.
 
-We study this trade-off on a single GPU serving ReAct agents~\cite{react} with a local 7B
-model~\cite{qwen} through llama.cpp~\cite{llamacpp}. Phase~1 asks which resource limits completed work
-under a bounded KV budget: (a) KV capacity for active requests, (b) KV held by agents idle in tool calls,
-(c) re-prefill after the runtime evicts a context, or (d) the GPU itself when memory never binds. We
-contribute a reproducible, instrumented workload, a FIFO fixed-concurrency baseline, and measurements
-that separate these effects.
+\section{Workload}
 
-\section{Workload and Methodology}
+Agents answer HotpotQA multi-hop questions~\cite{hotpotqa} by searching an offline corpus of 66,581
+paragraphs. HotpotQA annotates supporting facts, so every retrieved sentence can be labeled as evidence
+or not. The prompt grows append-only, so each step's prompt is a prefix of the next. Tool latency is
+lognormal (median 0.8\,s) and seeded per task, step, and tool, so all configurations replay identical
+delays. Workloads are frozen in advance (closed-loop or Poisson arrivals) and drawn from a 1,500-question
+split disjoint from the development and test sets. Table~\ref{tab:workload} defines the four profiles.
+The agent reaches an F1 of 0.64 on the development set, versus 0.25 for closed-book answering.
 
-\subsection{Workload}
-Agents answer HotpotQA multi-hop questions~\cite{hotpotqa}, searching an offline corpus of 66,581
-paragraphs. HotpotQA annotates supporting facts, so every retrieved sentence in a context can be labeled
-as evidence or not, which measures how much KV is useful rather than only how much is used. The prompt
-grows append-only, so each step's prompt is a prefix of the next. Four profiles cover the required mix:
-\texttt{react\_short} (contexts near 2k tokens), \texttt{react\_long} (growing from 1.5k to 3--7k),
-\texttt{react\_explain} (300 extra output tokens), and \texttt{oneshot\_long} (one 3.3k-token request).
-Tool latency is lognormal (median 0.8\,s) and seeded per task, step, and tool, so all configurations
-replay identical delays. Frozen workloads with closed-loop or Poisson arrivals are drawn from a
-1,500-question split. The agent reaches an F1 of 0.64, versus 0.25 closed-book.
+\begin{table}[t]
+  \caption{Task Profiles (A10G, 600 Tasks at $K=8$)}
+  \label{tab:workload}
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{2.5pt}
+  \begin{tabular}{@{}lrrrcrr@{}}
+    \toprule
+    Profile & Share & LLM & Tool & Context (tokens) & Output & F1 \\
+     & & calls & calls & first / peak p50 / p95 & tokens & \\
+    \midrule
+    \texttt{react\_short} & 40\% & 4.0 & 3.0 & 1.5k / 1.8k / 2.5k & 156 & 0.55 \\
+    \texttt{react\_long} & 30\% & 3.9 & 2.9 & 1.5k / 3.5k / 6.2k & 152 & 0.57 \\
+    \texttt{react\_explain} & 20\% & 4.9 & 2.9 & 1.7k / 2.3k / 3.1k & 443 & 0.60 \\
+    \texttt{oneshot\_long} & 10\% & 1.0 & 0 & 3.3k / 3.3k / 3.9k & 44 & 0.50 \\
+    \bottomrule
+  \end{tabular}\\[2pt]
+  \raggedright\scriptsize Share is the default mix; the budget sweep (E2) uses 70\% \texttt{react\_long},
+  30\% \texttt{react\_short}.
+\end{table}
 
-\subsection{Baseline and Measurement}
-We serve Qwen2.5-7B-Instruct (Q4\_K\_M, f16 KV) with \texttt{llama-server} b11960 on an NVIDIA A10G;
-the KV budget is the unified pool shared by all slots (\texttt{-c}). The baseline admits tasks in FIFO
-order to \K{} workers, and worker $k$ pins slot $k$, so an agent's KV stays resident through its tool
-calls. We record per-request tokens and timings, tool waits, and per-task latency, queueing, and EM/F1,
-and reconstruct per-slot KV occupancy, attributed to agents in a request, idle in a tool call, or
-finished. Throughput is measured between the 10th and 90th percentile completion. Runtime probes and
-microbenchmarks cover overflow, eviction, prefill, decode, and offload costs. F1 stays within
-0.52--0.64 in every configuration that completes at least 85\% of its tasks.
+\section{Runtime Characterization}
+
+Table~\ref{tab:runtime} lists runtime behavior and costs measured with dedicated probes and
+microbenchmarks. Three properties shape the results below. Over-committing the pool with active requests
+fails all of them at once. Under idle-slot pressure the runtime evicts by slot index, regardless of
+recency or size. Offloading a slot to host memory is cheaper than re-prefilling it but stalls every
+other slot while it runs. A cost model written from spec-sheet bandwidth and FLOPs before these
+measurements predicted 2.4k\,tok/s prefill and an 11\,ms offload round trip for 2k tokens; the measured
+values are 4.5k\,tok/s and 113\,ms, because slot save goes through a file on the server's main loop.
+
+\begin{table}[t]
+  \caption{Runtime Behavior and Costs (llama.cpp b11960, A10G)}
+  \label{tab:runtime}
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}L{0.43\columnwidth}L{0.53\columnwidth}@{}}
+    \toprule
+    Probe & Observation \\
+    \midrule
+    Active requests exceed the pool & all in-flight requests fail (HTTP 500) \\
+    Idle slots exceed the pool & lowest-index idle slot purged, one at a time \\
+    Same 1.5k-token prefix on 8 slots & stored once per slot, not shared \\
+    Decode, 1 $\rightarrow$ 64 requests (separate KV) & 95 $\rightarrow$ 1,537 tok/s total \\
+    Prefill at batch 16, separate vs.\ unified KV & 4,578 vs.\ 2,776 tok/s \\
+    Re-prefill, 2k / 8k tokens & 0.45 / 1.97\,s \\
+    Slot save / restore to host RAM & 1.35 / 4.74\,GB/s; blocks all slots (119\,ms for 3k tokens) \\
+    \texttt{-np} 4 vs.\ 64 at equal \texttt{-c} & no change in GPU memory or speed \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=0.8\textwidth]{../figures/phase1/summary.png}
+  \includegraphics[width=0.74\textwidth]{../figures/phase1/summary.png}
   \caption{(a) Steady-state throughput versus concurrency \K{} with an ample KV pool (131k tokens), for
   llama.cpp's unified pool and for per-slot KV regions. (b) Fraction of tasks completed as the KV budget
-  shrinks, long-context mix (70\% \texttt{react\_long}).}
+  shrinks, long-context mix.}
   \label{fig:summary}
 \end{figure*}
 
 \section{Results}
 
 \begin{table}[t]
-  \caption{Summary of Phase 1 Experiments}
-  \label{tab:results}
+  \caption{Concurrency Sweep with an Ample KV Pool (E1)}
+  \label{tab:e1}
   \centering
   \footnotesize
   \setlength{\tabcolsep}{3pt}
-  \begin{tabular}{@{}L{0.19\columnwidth}L{0.31\columnwidth}L{0.46\columnwidth}@{}}
+  \begin{tabular}{@{}rrccrr@{}}
     \toprule
-    Experiment & Setting & Result \\
+    \K{} & Done & Tasks/min & Service time (s) & TTFT & Mean KV \\
+     & & (correct) & p50 / p95 / p99 & p50 (s) & (idle) \\
     \midrule
-    Concurrency & \K{} = 1/4/8/16/32 & 14.5/36.8/\textbf{45.2}/43.0/31.0 tasks/min \\
-    Per-slot KV & \K{} = 8/16/32 & 43.0/\textbf{54.8}/\textbf{64.5} tasks/min \\
-    Open loop & \K{} = 8; 21/33/45 arr./min & p95 latency 16.5/21.1/30.7\,s \\
-    KV budget & 8k/16k/32k/64k tokens & max.\ working \K{} = 2/4/8/16; 22.8/37.8/47.8/47.3 tasks/min \\
-    Tool delay & $\times$0/1/4, \K{} = 16 & 44.1/43.0/41.0 tasks/min; idle KV 0/8/33\% \\
-    Prefix reuse & \K{} = 8 & no reuse: 36\% of baseline; runtime slot choice: $-$17\% \\
+    1 & 50/50 & 14.5 (6.7) & 3.8 / 7.8 / 10.6 & 0.04 & 2.0k (40\%) \\
+    4 & 200/200 & 36.8 (17.8) & 5.5 / 14.1 / 17.3 & 0.07 & 8.5k (29\%) \\
+    8 & 600/600 & \textbf{45.2} (20.6) & 8.4 / 22.6 / 30.6 & 0.13 & 17.4k (18\%) \\
+    16 & 599/600 & 43.0 (19.5) & 17.3 / 49.2 / 62.5 & 0.56 & 34.4k (8\%) \\
+    32 & 319/320 & 31.0 (15.2) & 44.4 / 141.7 / 157.2 & 1.24 & 68.9k (3\%) \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-Table~\ref{tab:results} summarizes the experiments and Fig.~\ref{fig:summary} shows the two central
-results.
+\subsection{Concurrency and the Unified KV Pool (E1)}
+Table~\ref{tab:e1} and Fig.~\ref{fig:summary}a show that throughput peaks at $K=8$ and falls by 31\% at
+$K=32$, while tail service time grows from 22.6\,s to 141.7\,s (p95). Work per task is constant, but the
+median time per generated token rises from 15\,ms at $K=4$ to 254\,ms at $K=32$, against 28\,ms for 32
+decodes with separate KV buffers. In the unified pool, attention cost appears to scale with the tokens of
+all slots (Table~\ref{tab:runtime}). A fixed KV region per slot removes most of the decline: 43.0, 54.8,
+and 64.5 tasks/min at $K=8$, 16, and 32, i.e., +27\% at $K=16$ with the same 131k-token budget and
+2.1$\times$ at $K=32$ with twice the pool, at the cost of static reservation. With Poisson arrivals at
+$K=8$ and 21, 33, and 45 tasks/min (up to 100\% of capacity), all tasks complete; p95 queue wait is 0,
+4.1, and 13.8\,s and p99 latency 19.9, 23.5, and 33.8\,s.
 
-\subsection{Concurrency and the Unified KV Pool}
-With an ample pool, throughput peaks at $K=8$ and falls by 31\% at $K=32$, although the work per task is
-constant. The median time per generated token rises from 15\,ms at $K=4$ to 254\,ms at $K=32$, against
-28\,ms for 32 decodes with separate KV buffers. In the unified pool, attention cost appears to scale with
-the tokens of all slots: at batch 16, prefill drops from 4,578 to 2,776\,tok/s when requests share the
-pool. A fixed KV region per slot removes most of the decline (+27\% at $K=16$ with the same 131k-token
-budget, 2.1$\times$ at $K=32$ with twice the pool), at the cost of static reservation.
+\subsection{KV Budget and Context Growth (E2)}
+When the active working set exceeds the pool, every in-flight request fails and the workers' next tasks
+fail likewise: doubling \K{} beyond the budget reduces completion from 89--100\% to at most 24\%
+(Fig.~\ref{fig:summary}b). Contexts grow 2.3$\times$ (median) to 4.2$\times$ (p95) during a
+\texttt{react\_long} task (Table~\ref{tab:workload}), so a fixed \K{} must be provisioned for peak
+demand. The largest working \K{} is about the budget divided by 4k tokens (2, 4, 8, 16 for 8k--64k), and
+the 8k and 16k budgets reach only 48\% and 80\% of the throughput of larger ones.
 
-\subsection{KV Budget and Context Growth}
-When the active working set exceeds the pool, the runtime fails every in-flight request instead of
-queueing, and the workers' next tasks fail likewise. Doubling \K{} beyond the budget reduces completion
-from 89--100\% to at most 24\% (Fig.~\ref{fig:summary}b); 971 of 972 failures are context overflows.
-Context growth forces conservative provisioning: a \texttt{react\_long} agent grows from a median of
-1,488 tokens to a median peak of 3,437 and a 95th-percentile peak of 6,226. The largest working \K{} is
-about the budget divided by 4k tokens, and 8k and 16k budgets reach only 48\% and 80\% of the throughput
-of larger ones.
+\subsection{Idle KV, Retained Context, and Composition (E3--E5)}
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{../figures/phase1/pressure_timeline.png}
+  \caption{KV held over time under a tight budget (16k tokens, $K=4$, long-context mix), by owner state.
+  The pool averages 58\% occupancy, 36\% of it held by agents waiting on tools. All 16 failures occur in
+  four bursts of four, when held KV approaches the budget.}
+  \label{fig:pressure}
+\end{figure}
+With an ample pool, scaling tool delays by 0, 1, and 4 leaves 0\%, 8\%, and 33\% of held KV idle while
+throughput changes only from 44.1 to 41.0 tasks/min. At the small \K{} that tight budgets impose,
+36--44\% of held KV (about a quarter of the pool) belongs to agents waiting on tools.
+Fig.~\ref{fig:pressure} shows both sources of slack: headroom kept for peaks, and idle KV. Disabling prefix
+reuse increases prefill work 4.9$\times$ and cuts throughput to 36\%; when llama.cpp assigns slots
+itself, 31\% of returning steps land on another slot, costing 17\%. The 1.4k-token ReAct prefix is 73\%
+of a \texttt{react\_short} context and is duplicated per slot, and only 4.5\% of retrieved tokens in
+\texttt{react\_long} contexts are supporting facts.
 
-\subsection{Idle KV and Tool Latency}
-With an ample pool, scaling tool delays by four leaves 33\% of the held KV idle but costs only 7\% of
-throughput, since other agents keep the GPU busy. At the small \K{} that tight budgets impose, 36--44\% of
-the held KV (about a quarter of the pool) belongs to agents waiting on tools; this share depends on \K{},
-not on memory pressure.
+\subsection{Memory, Failures, and Quality}
+GPU memory is fixed by the preallocated pool (5.0\,GiB at 8k to 11.6\,GiB at 131k tokens; server RSS
+$\le$1.1\,GiB), so occupied KV tokens are the varying memory metric. No request or task timed out. Of
+5,890 tasks, 971 failed from context overflow (all in E2) and 9 from a client keep-alive race. F1 stays
+within 0.52--0.64 in every configuration that completes at least 85\% of its tasks.
 
-\subsection{Retained Context and Runtime Policy}
-Disabling prefix reuse increases prefill work 4.9$\times$ and cuts throughput to 36\%. When llama.cpp
-assigns slots itself, 31\% of returning steps land on another slot and re-prefill, costing 17\%. Under
-pressure it evicts the idle slot with the lowest index, regardless of recency or size. Offloading 2k
-tokens to host memory takes 113\,ms and stalls all other slots meanwhile; re-prefilling takes 0.45\,s
-(2k tokens) to 1.97\,s (8k).
+\section{Dominant Bottleneck and Phase 2 Direction}
 
-\subsection{KV Composition}
-The 1.4k-token ReAct prefix accounts for 73\% of a \texttt{react\_short} context and is stored separately
-in every slot. In \texttt{react\_long} contexts only 4.5\% of retrieved tokens are supporting facts.
-
-\section{Dominant Bottleneck}
 With ample memory, throughput is limited by attention cost in the unified pool (d), which caps useful
-concurrency at $K\approx8$ on this GPU. Under a tight budget, active KV capacity (a) binds: contexts grow
-and overflow fails all in-flight work, so a fixed \K{} must be provisioned for peak demand and the GPU is
-underutilized. Idle KV (b) is a large share of the pool only in this regime. Re-prefill after eviction
-(c) was rare under the always-retain baseline (at most 12 live-agent evictions per run) but costly.
+concurrency at $K\approx8$. Under a tight budget, active KV capacity (a) binds: contexts grow and overflow
+fails all in-flight work, so a fixed \K{} is provisioned for peaks and the GPU is underutilized. Idle KV
+(b) is a large share of the pool only in this regime, and re-prefill after eviction (c) was rare under
+always-retain (at most 12 live-agent evictions per run) but costly.
 
-\section{Phase 2 Plan}
-Phase~2 targets the memory-constrained regime with one mechanism: an agent-level KV lifecycle manager at
-tool-call boundaries, combined with admission that reserves each agent's projected peak KV. Unlike
-InferCept~\cite{infercept}, built on vLLM~\cite{vllm}, it must use llama.cpp's slot save, restore, and
-erase controls, whose offload path blocks all slots. Because releasing KV costs more than retaining it
-through a typical tool call (break-even 1.7--3.0\,s at $K=16$ versus a 0.8\,s median delay), the policy
-retains by default and releases the agent expected to return last only under pressure. Baselines are the
-best fixed \K{} per budget, per-slot KV regions, and the runtime's default policy, evaluated across
-arrival rates, mixes, and low-benefit cases.
+Phase~2 therefore targets the memory-constrained regime with an agent-level KV lifecycle manager at
+tool-call boundaries and admission that reserves each agent's projected peak KV. Unlike
+InferCept~\cite{infercept}, built on vLLM~\cite{vllm}, it must use llama.cpp's slot controls, whose
+offload path blocks all slots. Because releasing KV costs more than retaining it through a typical tool
+call (break-even 1.7--3.0\,s at $K=16$ versus a 0.8\,s median delay), the policy retains by default and
+releases the agent expected to return last only under pressure. Baselines are the best fixed \K{} per
+budget, per-slot KV regions, and the runtime's default policy.
 
-\begin{thebibliography}{6}
-\footnotesize
-\bibitem{hotpotqa} Z.~Yang \emph{et al.}, ``HotpotQA: A dataset for diverse, explainable multi-hop question
-answering,'' in \emph{Proc. EMNLP}, 2018.
-\bibitem{react} S.~Yao \emph{et al.}, ``ReAct: Synergizing reasoning and acting in language models,'' in
-\emph{Proc. ICLR}, 2023.
-\bibitem{llamacpp} G.~Gerganov \emph{et al.}, ``llama.cpp,'' \url{https://github.com/ggml-org/llama.cpp}.
-\bibitem{qwen} Qwen Team, ``Qwen2.5 technical report,'' arXiv:2412.15115, 2024.
-\bibitem{infercept} R.~Abhyankar \emph{et al.}, ``InferCept: Efficient intercept support for augmented
-large language model inference,'' in \emph{Proc. ICML}, 2024.
-\bibitem{vllm} W.~Kwon \emph{et al.}, ``Efficient memory management for large language model serving
-with PagedAttention,'' in \emph{Proc. SOSP}, 2023.
-\end{thebibliography}
+
 
 \onecolumn
 \appendix[Timeline and Milestones]
@@ -190,5 +219,19 @@ with PagedAttention,'' in \emph{Proc. SOSP}, 2023.
     \bottomrule
   \end{tabular}
 \end{center}
+
+\begin{thebibliography}{6}
+\footnotesize
+\bibitem{hotpotqa} Z.~Yang \emph{et al.}, ``HotpotQA: A dataset for diverse, explainable multi-hop question
+answering,'' in \emph{Proc. EMNLP}, 2018.
+\bibitem{react} S.~Yao \emph{et al.}, ``ReAct: Synergizing reasoning and acting in language models,'' in
+\emph{Proc. ICLR}, 2023.
+\bibitem{llamacpp} G.~Gerganov \emph{et al.}, ``llama.cpp,'' \url{https://github.com/ggml-org/llama.cpp}.
+\bibitem{qwen} Qwen Team, ``Qwen2.5 technical report,'' arXiv:2412.15115, 2024.
+\bibitem{infercept} R.~Abhyankar \emph{et al.}, ``InferCept: Efficient intercept support for augmented
+large language model inference,'' in \emph{Proc. ICML}, 2024.
+\bibitem{vllm} W.~Kwon \emph{et al.}, ``Efficient memory management for large language model serving
+with PagedAttention,'' in \emph{Proc. SOSP}, 2023.
+\end{thebibliography}
 
 \end{document}

@@ -249,6 +249,32 @@ def fig_summary(rows: list[dict[str, str]], out: Path) -> None:
     plt.close(fig)
 
 
+def fig_pressure(root: Path, out: Path) -> None:
+    """KV held over time under a tight budget (E2, -c 16k, K=4), against the pool limit."""
+    from analysis.kv_timeline import intervals, load_events, timeline
+    run = root / "e2_budget_k/c16k_k4/rep0"
+    if not (run / "events.jsonl").exists():
+        return
+    ivs, _ = intervals(load_events(run))
+    grid = timeline(ivs, 2.0)
+    t = [r["t"] for r in grid]
+    ys = [[r[s] / 1000 for r in grid] for s in ("active", "idle_tool", "stale")]
+    fig, a = plt.subplots(figsize=(3.5, 1.75))
+    a.stackplot(t, *ys, colors=[C["active"], C["idle_tool"], C["stale"]],
+                labels=["in a request", "idle (waiting on a tool)", "stale (task finished)"])
+    a.axhline(16.384, color="#c53030", lw=1, ls="--")
+    a.text(t[-1] * 0.99, 16.9, "KV budget (16k)", color="#c53030", fontsize=7, ha="right")
+    a.set_xlim(0, t[-1])
+    a.set_ylim(0, 19)
+    a.set_xlabel("time (s)")
+    a.set_ylabel("KV tokens held (k)")
+    a.legend(frameon=False, loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3, fontsize=6.5,
+             handlelength=1.2, columnspacing=0.8)
+    fig.tight_layout(pad=0.3)
+    fig.savefig(out / "pressure_timeline.png")
+    plt.close(fig)
+
+
 def fig_e5(root: Path, out: Path) -> None:
     for name, run in (("e5_timeline_k16", root / "e1_concurrency/k16/rep0"),
                       ("e5_timeline_d4", root / "e3_delay/d4/rep0")):
@@ -286,6 +312,7 @@ def main() -> None:
         fig_e3_e4(rows, out)
         fig_summary(rows, out)
     fig_e5(root, out)
+    fig_pressure(root, out)
     print(f"figures in {out}")
 
 
