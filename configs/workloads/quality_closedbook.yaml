@@ -1,0 +1,7 @@
+# Same 100 dev questions as quality_dev (same split, n_tasks and seed), answered closed-book.
+name: quality_closedbook
+split: dev
+n_tasks: 100
+seed: 0
+mix: {closedbook: 1.0}
+arrival: {type: batch}

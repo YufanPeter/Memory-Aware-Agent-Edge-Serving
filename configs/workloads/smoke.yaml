@@ -1,0 +1,7 @@
+# 12 tasks, all profiles, arriving together. For checking the pipeline end to end.
+name: smoke
+split: dev
+n_tasks: 12
+seed: 0
+mix: {react_short: 0.25, react_long: 0.25, react_explain: 0.25, oneshot_long: 0.25}
+arrival: {type: batch}

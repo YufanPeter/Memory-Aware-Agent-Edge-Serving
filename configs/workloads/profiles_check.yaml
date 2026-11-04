@@ -1,0 +1,8 @@
+# Profile check: 80 dev questions, 20 per serving profile. Measures each profile's real
+# context size, output length and quality on the experiment model. Run with --delay-scale 0.
+name: profiles_check
+split: dev
+n_tasks: 80
+seed: 0
+mix: {react_short: 0.25, react_long: 0.25, react_explain: 0.25, oneshot_long: 0.25}
+arrival: {type: batch}

@@ -1,0 +1,5 @@
+# Store and check out text files with LF on every machine (Mac, Windows, AWS),
+# so shell scripts run and data/workload hashes match across hosts.
+* text=auto eol=lf
+*.gguf binary
+*.parquet binary

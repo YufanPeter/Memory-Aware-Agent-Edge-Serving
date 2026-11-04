@@ -1,0 +1,7 @@
+# Phase 1 sweep workload: mixed profiles, Poisson arrivals. Override rate per sweep point.
+name: mixed_poisson
+split: dev
+n_tasks: 60
+seed: 0
+mix: {react_short: 0.4, react_long: 0.3, react_explain: 0.2, oneshot_long: 0.1}
+arrival: {type: poisson, rate: 0.2}

@@ -1,0 +1,10 @@
+# E1: closed-loop concurrency sweep. Pool large enough that KV never binds (131k tokens,
+# ~7 GiB): this isolates how K alone affects throughput, latency and KV held.
+name: e1_concurrency
+defaults: {ctx: 131072, parallel: 64, delay_scale: 1.0, reps: 1}
+points:
+  - {name: k1, workload: workloads/p1_mixed_50.json, k: 1}
+  - {name: k4, workload: workloads/p1_mixed_200.json, k: 4}
+  - {name: k8, workload: workloads/p1_mixed_200.json, k: 8, reps: 3}
+  - {name: k16, workload: workloads/p1_mixed_200.json, k: 16, reps: 3}
+  - {name: k32, workload: workloads/p1_mixed_320.json, k: 32}

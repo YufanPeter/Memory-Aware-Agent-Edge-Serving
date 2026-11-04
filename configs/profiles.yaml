@@ -1,0 +1,37 @@
+# Task profiles (see edgeserve/profiles.py). A workload mixes these.
+defaults:
+  few_shot: 6
+  max_steps: 6
+  n_predict: 128
+  max_parse_errors: 2
+  # Tool latency = idle gap between an agent's LLM calls. Scaled per run with --delay-scale.
+  delay: {type: lognormal, median: 0.8, sigma: 0.6, max_s: 5.0}
+  per_tool_delay:
+    lookup: {type: fixed, seconds: 0.1}
+
+profiles:
+  # Multi-step, short context, short output.
+  react_short:
+    search_sentences: 3
+  # Multi-step, long context: each search returns the whole paragraph plus 9 BM25-related ones
+  # (on a title miss: the top 10 full-text matches).
+  react_long:
+    search_sentences: 0
+    neighbors: 9
+  # Multi-step, short context, long output: after finish, a fixed-length Explanation
+  # (decoded with ignore_eos, so every task generates exactly explain_tokens more tokens).
+  react_explain:
+    search_sentences: 3
+    explain_tokens: 300
+  # Single step, long context: the question's own 10 paragraphs plus 15 BM25 distractors
+  # (shuffled per question), answered without tools. 30 distractors drop F1 to ~0.4.
+  oneshot_long:
+    mode: oneshot
+    max_steps: 1
+    n_predict: 256
+    extra_paragraphs: 15
+  # Quality baseline only (not part of serving workloads): no retrieval, answer from memory.
+  closedbook:
+    mode: closedbook
+    max_steps: 1
+    n_predict: 128

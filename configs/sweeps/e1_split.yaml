@@ -1,0 +1,9 @@
+# E1b: same closed-loop points as e1_concurrency, but without the unified KV pool: each of the
+# -np slots gets its own fixed -c/-np region (8,192 tokens), so attention only scans the slot's
+# own tokens. Tests whether the unified pool makes attention cost grow with total pool occupancy.
+name: e1_split
+defaults: {delay_scale: 1.0, extra: "--no-kv-unified"}
+points:
+  - {name: k8, workload: workloads/p1_mixed_200.json, k: 8, parallel: 8, ctx: 65536}
+  - {name: k16, workload: workloads/p1_mixed_200.json, k: 16, parallel: 16, ctx: 131072}
+  - {name: k32, workload: workloads/p1_mixed_320.json, k: 32, parallel: 32, ctx: 262144}
