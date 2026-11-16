@@ -1,0 +1,29 @@
+# P1-dev main comparison (docs/phase2_spec.md §8.1-8.2), trimmed to four points: fresh
+# post-freeze runs on dev_long_200 (70% react_long / 30% react_short, all at t=0), 2 reps.
+# Knobs come from the perf-split tuning only (p0_baselines, p0x4_tune, p2_tune); no tuning run
+# is reported.
+#   B1  observe, pinned, -np 64, --cache-ram 0: the best K with >= 95% completion and the
+#       K with the highest goodput (which drops tasks)
+#   B2  observe, unpinned, -np K, --cache-ram h·c (896 / 1792 MiB at 16k / 32k)
+#   ours, ours_h0 (drop to prefix only, no host tier): kv admission, k = K_max (8 at x1,
+#       16 at x4), omega tuned per point: 16k x4 1.0, 8k x1 1.0, 16k x1 0.5, 32k x4 0.5
+# Headline points first (16k x4, 8k x1), then 16k x1 and 32k x4 (predicted small / no benefit).
+name: p2_main
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 2, policy: observe}
+points:
+  - {name: c16k_d4_b1_k4, ctx: 16384, delay_scale: 4.0, k: 4}
+  - {name: c16k_d4_b1_k6, ctx: 16384, delay_scale: 4.0, k: 6}
+  - {name: c16k_d4_b2_k6, ctx: 16384, delay_scale: 4.0, k: 6, cache_ram: 896, pin: false, parallel: k}
+  - {name: c16k_d4_ours, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}}
+  - {name: c16k_d4_ours_h0, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours_h0, kvm: {omega: 1.0}}
+  - {name: c8k_d1_b1_k2, ctx: 8192, delay_scale: 1.0, k: 2}
+  - {name: c8k_d1_b1_k3, ctx: 8192, delay_scale: 1.0, k: 3}
+  - {name: c8k_d1_ours, ctx: 8192, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 1.0}}
+  - {name: c8k_d1_ours_h0, ctx: 8192, delay_scale: 1.0, k: 8, policy: ours_h0, kvm: {omega: 1.0}}
+  - {name: c16k_d1_b1_k3, ctx: 16384, delay_scale: 1.0, k: 3}
+  - {name: c16k_d1_b1_k4, ctx: 16384, delay_scale: 1.0, k: 4}
+  - {name: c16k_d1_b2_k4, ctx: 16384, delay_scale: 1.0, k: 4, cache_ram: 896, pin: false, parallel: k}
+  - {name: c16k_d1_ours, ctx: 16384, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 0.5}}
+  - {name: c32k_d4_b1_k8, ctx: 32768, delay_scale: 4.0, k: 8}
+  - {name: c32k_d4_b2_k8, ctx: 32768, delay_scale: 4.0, k: 8, cache_ram: 1792, pin: false, parallel: k}
+  - {name: c32k_d4_ours, ctx: 32768, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 0.5}}

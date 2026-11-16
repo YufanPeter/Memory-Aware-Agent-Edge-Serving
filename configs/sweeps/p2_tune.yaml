@@ -1,0 +1,32 @@
+# Phase 2 tuning on the perf split (p1_long_200), 1 rep, never reported (docs/phase2_spec.md
+# §8.2, changelog 17). Trimmed from tune_omega.yaml / tune_2x2.yaml to the four main points.
+# Baselines were tuned on the same workload in p0_baselines / p0x4_tune:
+#   B1 best K: x1 8k 2-3, 16k 4-5, 32k 8;  x4 8k 2-4, 16k 4-6, 32k 8.  K_max: 8 at x1, 16 at x4.
+# (1) ours: omega in {0.5, 1, 2} at 8k x1, 16k x1, 16k x4, 32k x4 (k = K_max).
+# (2) 2x2 cells at 16k x4: adm_retain omega {0.5, 1, 2}; gated_k K {4, 6, 8}; managed_k K {4, 6}.
+# (3) B2 at 8k x1, K {2, 3} (K = 4 completed 28/200 in p0_baselines).
+name: p2_tune
+defaults: {workload: workloads/p1_long_200.json, parallel: 64, reps: 1}
+points:
+  - {name: c16k_d4_ours_w0.5, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 0.5}}
+  - {name: c16k_d4_ours_w1, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}}
+  - {name: c16k_d4_ours_w2, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 2.0}}
+  - {name: c8k_d1_ours_w0.5, ctx: 8192, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 0.5}}
+  - {name: c8k_d1_ours_w1, ctx: 8192, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 1.0}}
+  - {name: c8k_d1_ours_w2, ctx: 8192, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 2.0}}
+  - {name: c16k_d1_ours_w0.5, ctx: 16384, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 0.5}}
+  - {name: c16k_d1_ours_w1, ctx: 16384, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 1.0}}
+  - {name: c16k_d1_ours_w2, ctx: 16384, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 2.0}}
+  - {name: c32k_d4_ours_w0.5, ctx: 32768, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 0.5}}
+  - {name: c32k_d4_ours_w1, ctx: 32768, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}}
+  - {name: c32k_d4_ours_w2, ctx: 32768, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 2.0}}
+  - {name: c16k_d4_admret_w0.5, ctx: 16384, delay_scale: 4.0, k: 16, policy: adm_retain, kvm: {omega: 0.5}}
+  - {name: c16k_d4_admret_w1, ctx: 16384, delay_scale: 4.0, k: 16, policy: adm_retain, kvm: {omega: 1.0}}
+  - {name: c16k_d4_admret_w2, ctx: 16384, delay_scale: 4.0, k: 16, policy: adm_retain, kvm: {omega: 2.0}}
+  - {name: c16k_d4_gatedk_k4, ctx: 16384, delay_scale: 4.0, k: 4, policy: gated_k}
+  - {name: c16k_d4_gatedk_k6, ctx: 16384, delay_scale: 4.0, k: 6, policy: gated_k}
+  - {name: c16k_d4_gatedk_k8, ctx: 16384, delay_scale: 4.0, k: 8, policy: gated_k}
+  - {name: c16k_d4_managedk_k4, ctx: 16384, delay_scale: 4.0, k: 4, policy: managed_k}
+  - {name: c16k_d4_managedk_k6, ctx: 16384, delay_scale: 4.0, k: 6, policy: managed_k}
+  - {name: c8k_d1_b2_k2, ctx: 8192, delay_scale: 1.0, k: 2, policy: observe, cache_ram: 448, pin: false, parallel: k}
+  - {name: c8k_d1_b2_k3, ctx: 8192, delay_scale: 1.0, k: 3, policy: observe, cache_ram: 448, pin: false, parallel: k}

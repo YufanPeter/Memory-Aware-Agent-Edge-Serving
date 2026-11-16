@@ -1,0 +1,17 @@
+# P0b grid edges at 4x tool delays (docs/phase2_spec.md §8.2, 11/17), the points the spec lists
+# that p0x4_tune.yaml does not have. Same sweep name, so results land next to p0x4_tune's.
+# B1 extensions run only if the best K of p0x4_tune is at the edge of its grid:
+#   8k best K = 6 -> c8k_k5 is already bracketed; run c8k_k8 only if K=6 wins
+#   16k best K = 10 -> run c16k_k12;  32k best K = 16 -> run c32k_k20
+# B2's spec grid is 8k {4,6,8} and 32k {12,16,20}; p0x4_tune has {3,4,6} and {8,12,16}, so the
+# top values are added here (c8k_cr_k8, c32k_cr_k20). Tuning runs on perf; never reported.
+#   uv run python -m scripts.sweep configs/sweeps/p0b_x4_edge.yaml --only c16k_k12
+name: p0x4_tune
+defaults: {parallel: 64, workload: workloads/p1_long_200.json, delay_scale: 4.0}
+points:
+  - {name: c8k_k5, ctx: 8192, k: 5}
+  - {name: c8k_k8, ctx: 8192, k: 8}
+  - {name: c16k_k12, ctx: 16384, k: 12}
+  - {name: c32k_k20, ctx: 32768, k: 20}
+  - {name: c8k_cr_k8, ctx: 8192, k: 8, cache_ram: 448, pin: false, parallel: k}
+  - {name: c32k_cr_k20, ctx: 32768, k: 20, cache_ram: 1792, pin: false, parallel: k}

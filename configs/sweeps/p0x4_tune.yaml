@@ -1,0 +1,30 @@
+# P0 at 4x tool delays (median 3.2 s): tune the baselines' K on the perf split, as the spec
+# requires (docs/phase2_spec.md §8.2, changelog 12/17/19). B1 = pinned, -np 64, retain;
+# B2 = llama.cpp's idle-slot host cache, unpinned, -np K, --cache-ram matched to the host tier
+# h·c with h = 1 (c × 57,360 B: 448 / 896 / 1792 MiB at 8k / 16k / 32k).
+# K_max = best K with ample memory (131k) at 4x. Tuning runs are never reported as results.
+name: p0x4_tune
+defaults: {parallel: 64, workload: workloads/p1_long_200.json, delay_scale: 4.0}
+points:
+  - {name: c16k_k4, ctx: 16384, k: 4}
+  - {name: c16k_k6, ctx: 16384, k: 6}
+  - {name: c16k_k8, ctx: 16384, k: 8}
+  - {name: c16k_k10, ctx: 16384, k: 10}
+  - {name: c8k_k2, ctx: 8192, k: 2}
+  - {name: c8k_k3, ctx: 8192, k: 3}
+  - {name: c8k_k4, ctx: 8192, k: 4}
+  - {name: c8k_k6, ctx: 8192, k: 6}
+  - {name: c16k_cr_k6, ctx: 16384, k: 6, cache_ram: 896, pin: false, parallel: k}
+  - {name: c16k_cr_k9, ctx: 16384, k: 9, cache_ram: 896, pin: false, parallel: k}
+  - {name: c16k_cr_k12, ctx: 16384, k: 12, cache_ram: 896, pin: false, parallel: k}
+  - {name: c131k_k8, ctx: 131072, k: 8}
+  - {name: c131k_k16, ctx: 131072, k: 16}
+  - {name: c32k_k8, ctx: 32768, k: 8}
+  - {name: c32k_k12, ctx: 32768, k: 12}
+  - {name: c32k_k16, ctx: 32768, k: 16}
+  - {name: c8k_cr_k3, ctx: 8192, k: 3, cache_ram: 448, pin: false, parallel: k}
+  - {name: c8k_cr_k4, ctx: 8192, k: 4, cache_ram: 448, pin: false, parallel: k}
+  - {name: c8k_cr_k6, ctx: 8192, k: 6, cache_ram: 448, pin: false, parallel: k}
+  - {name: c32k_cr_k8, ctx: 32768, k: 8, cache_ram: 1792, pin: false, parallel: k}
+  - {name: c32k_cr_k12, ctx: 32768, k: 12, cache_ram: 1792, pin: false, parallel: k}
+  - {name: c32k_cr_k16, ctx: 32768, k: 16, cache_ram: 1792, pin: false, parallel: k}

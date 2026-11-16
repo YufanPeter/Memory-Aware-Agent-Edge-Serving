@@ -1,0 +1,14 @@
+# P5 delay-model robustness (docs/phase2_spec.md §4.2, §8.2, 11/27; not cuttable): true delay
+# scale {2, 8} at 16k with the knobs frozen at x4. ours ranks victims by the online empirical
+# residual; oracle_prior uses the generator's distribution scaled by prior_delay_scale = 4, i.e.
+# misspecified by 2x either way; clairvoyant (R1) knows each true delay. 6 runs.
+# PLACEHOLDERS: K_max at x4 (16), omega.
+name: p5
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 1, ctx: 16384, k: 16}
+points:
+  - {name: c16k_d2_ours, delay_scale: 2.0, policy: ours, kvm: {omega: 1.0}}
+  - {name: c16k_d2_oracle4, delay_scale: 2.0, policy: oracle_prior, kvm: {omega: 1.0, prior_delay_scale: 4.0}}
+  - {name: c16k_d2_r1, delay_scale: 2.0, policy: clairvoyant, kvm: {omega: 1.0}}
+  - {name: c16k_d8_ours, delay_scale: 8.0, policy: ours, kvm: {omega: 1.0}}
+  - {name: c16k_d8_oracle4, delay_scale: 8.0, policy: oracle_prior, kvm: {omega: 1.0, prior_delay_scale: 4.0}}
+  - {name: c16k_d8_r1, delay_scale: 8.0, policy: clairvoyant, kvm: {omega: 1.0}}

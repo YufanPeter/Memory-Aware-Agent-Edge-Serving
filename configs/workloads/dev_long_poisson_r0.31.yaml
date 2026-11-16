@@ -1,0 +1,12 @@
+# Phase 2 P3 open loop at 16k x4 (spec §8.2 Metrics): dev_long_200's tasks (same seed, so the
+# same question/profile per task id) with Poisson arrivals at 0.31 tasks/s. Rates are fractions of
+# measured capacity: 0.31 ≈ 0.6 x and 0.44 ≈ 0.85 x B1's predicted steady throughput at 16k x4
+# (≈ 31 tasks/min, spec §1), 0.47 ≈ 0.85 x ours' (≈ 33 tasks/min). PLACEHOLDERS: once P1-dev has
+# measured B1 and ours at c16k_d4, generate new files named by the measured rates (frozen
+# workloads are never edited) and point configs/sweeps/p3_*.yaml at them.
+name: dev_long_poisson_r0.31
+split: dev
+n_tasks: 200
+seed: 0
+mix: {react_long: 0.7, react_short: 0.3}
+arrival: {type: poisson, rate: 0.31}

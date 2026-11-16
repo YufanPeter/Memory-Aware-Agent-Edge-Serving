@@ -1,0 +1,40 @@
+# P0: tune the simple baselines Phase 2 must beat, on the E2 long-context mix.
+# (1) Fixed K between the E2 grid points (unified pool, pinned slots, always retain), so the
+#     "best fixed K per budget" is not an artifact of the power-of-two grid.
+# (2) Per-slot KV regions of 8,192 tokens, the smallest region that holds a react_long peak.
+# (3) llama.cpp's built-in idle-slot cache: with --cache-ram > 0, --cache-idle-slots (on by
+#     default) saves every idle slot to a host-RAM prompt cache and clears it from the pool
+#     whenever a request starts (E0b), and restores it by prefix match when the agent returns.
+#     Run unpinned (-np = K): with id_slot set, a request to a cleared slot never reloads from
+#     the RAM cache (f_keep = 0/0 = NaN in get_available_slot, server-context.cpp:1853).
+#     The c*_cr_k* points ran with --cache-ram 4096 (results kept under those names). The spec
+#     (docs/phase2_spec.md §6.4, §8.2) matches B2's host tier to ours' h·c instead, with h = 1:
+#     c × 57,360 B = 448 / 896 / 1792 MiB at 8k / 16k / 32k, and gives B2 the same 3-value K
+#     budget as B1: the c*_crh_k* points. Tuning runs on the perf split; never reported.
+name: p0_baselines
+defaults: {parallel: 64, workload: workloads/p1_long_200.json, delay_scale: 1.0}
+points:
+  - {name: c8k_k3, ctx: 8192, k: 3}
+  - {name: c16k_k3, ctx: 16384, k: 3}
+  - {name: c16k_k5, ctx: 16384, k: 5}
+  - {name: c16k_k6, ctx: 16384, k: 6}
+  - {name: c32k_k6, ctx: 32768, k: 6}
+  - {name: c32k_k10, ctx: 32768, k: 10}
+  - {name: c32k_k12, ctx: 32768, k: 12}
+  - {name: c16k_ps_k2, ctx: 16384, k: 2, parallel: k, extra: "--no-kv-unified"}
+  - {name: c32k_ps_k4, ctx: 32768, k: 4, parallel: k, extra: "--no-kv-unified"}
+  - {name: c8k_cr_k4, ctx: 8192, k: 4, cache_ram: 4096, pin: false, parallel: k}
+  - {name: c16k_cr_k4, ctx: 16384, k: 4, cache_ram: 4096, pin: false, parallel: k}
+  - {name: c16k_cr_k8, ctx: 16384, k: 8, cache_ram: 4096, pin: false, parallel: k}
+  - {name: c32k_cr_k8, ctx: 32768, k: 8, cache_ram: 4096, pin: false, parallel: k}
+  - {name: c32k_cr_k16, ctx: 32768, k: 16, cache_ram: 4096, pin: false, parallel: k}
+  # B2 at the matched host tier h·c (spec §8.2 P0: 8k {3,4,6}, 16k {4,6,8}, 32k {8,12,16}).
+  - {name: c8k_crh_k3, ctx: 8192, k: 3, cache_ram: 448, pin: false, parallel: k}
+  - {name: c8k_crh_k4, ctx: 8192, k: 4, cache_ram: 448, pin: false, parallel: k}
+  - {name: c8k_crh_k6, ctx: 8192, k: 6, cache_ram: 448, pin: false, parallel: k}
+  - {name: c16k_crh_k4, ctx: 16384, k: 4, cache_ram: 896, pin: false, parallel: k}
+  - {name: c16k_crh_k6, ctx: 16384, k: 6, cache_ram: 896, pin: false, parallel: k}
+  - {name: c16k_crh_k8, ctx: 16384, k: 8, cache_ram: 896, pin: false, parallel: k}
+  - {name: c32k_crh_k8, ctx: 32768, k: 8, cache_ram: 1792, pin: false, parallel: k}
+  - {name: c32k_crh_k12, ctx: 32768, k: 12, cache_ram: 1792, pin: false, parallel: k}
+  - {name: c32k_crh_k16, ctx: 32768, k: 16, cache_ram: 1792, pin: false, parallel: k}

@@ -1,0 +1,52 @@
+# P1-dev main table (docs/phase2_spec.md §8.2, 11/19-21): fresh post-freeze runs on dev_long_200
+# (70% react_long / 30% react_short, every dev question at t=0). 55 runs.
+#   B1  observe, pinned, -np 64, --cache-ram 0, fixed K (the P0/P0b winner)
+#   B2  observe, unpinned, -np K, --cache-ram h·c (448 / 896 / 1792 MiB at 8k / 16k / 32k)
+#   B3  observe, --no-kv-unified, -np c/8192 = K (16k, 32k at x1 only)
+#   ours, ours_h0 (drop only), B4 ttl_off (ttl_x line at 16k x4), B5 always_off: kv admission,
+#       full gate, k = K_max, ours' omega
+# PLACEHOLDERS to replace before running: B1 K (x1: 2 / 4 / 8 from E2b and P0; x4: 4 / 8 / 12
+# from the active-request model, spec §1, until P0b), B2 K (middle of its P0/P0b grid), K_max at
+# x4 (16, until the P0b 131k runs) and omega (1.0, until tune_omega).
+# Reps: 3 at 16k x4 and 8k x1 (the headline cells, Welch + bootstrap), 2 at 8k x4 and 16k x1,
+# 1 at 32k. `sched` rows are in p2.yaml.
+name: p1_dev
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 1}
+points:
+  # --- 8k x1 (safety / admission headline) ---
+  - {name: c8k_d1_b1, ctx: 8192, delay_scale: 1.0, k: 2, policy: observe, reps: 3}
+  - {name: c8k_d1_b2, ctx: 8192, delay_scale: 1.0, k: 4, policy: observe, pin: false, parallel: k, cache_ram: 448, reps: 3}
+  - {name: c8k_d1_ours, ctx: 8192, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 1.0}, reps: 3}
+  - {name: c8k_d1_ours_h0, ctx: 8192, delay_scale: 1.0, k: 8, policy: ours_h0, kvm: {omega: 1.0}}
+  # --- 16k x1 ---
+  - {name: c16k_d1_b1, ctx: 16384, delay_scale: 1.0, k: 4, policy: observe, reps: 2}
+  - {name: c16k_d1_b2, ctx: 16384, delay_scale: 1.0, k: 6, policy: observe, pin: false, parallel: k, cache_ram: 896, reps: 2}
+  - {name: c16k_d1_ours, ctx: 16384, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 1.0}, reps: 2}
+  - {name: c16k_d1_ours_h0, ctx: 16384, delay_scale: 1.0, k: 8, policy: ours_h0, kvm: {omega: 1.0}}
+  - {name: c16k_d1_b3, ctx: 16384, delay_scale: 1.0, k: 2, parallel: k, extra: "--no-kv-unified", policy: observe}
+  # --- 32k x1 (no-benefit by construction: K_max = B1's K) ---
+  - {name: c32k_d1_b1, ctx: 32768, delay_scale: 1.0, k: 8, policy: observe}
+  - {name: c32k_d1_b2, ctx: 32768, delay_scale: 1.0, k: 12, policy: observe, pin: false, parallel: k, cache_ram: 1792}
+  - {name: c32k_d1_ours, ctx: 32768, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 1.0}}
+  - {name: c32k_d1_ours_h0, ctx: 32768, delay_scale: 1.0, k: 8, policy: ours_h0, kvm: {omega: 1.0}}
+  - {name: c32k_d1_b3, ctx: 32768, delay_scale: 1.0, k: 4, parallel: k, extra: "--no-kv-unified", policy: observe}
+  # --- 16k x4 (lifecycle headline) ---
+  - {name: c16k_d4_b1, ctx: 16384, delay_scale: 4.0, k: 8, policy: observe, reps: 3}
+  - {name: c16k_d4_b2, ctx: 16384, delay_scale: 4.0, k: 9, policy: observe, pin: false, parallel: k, cache_ram: 896, reps: 3}
+  - {name: c16k_d4_ours, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}, reps: 3}
+  - {name: c16k_d4_ours_h0, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours_h0, kvm: {omega: 1.0}, reps: 2}
+  - {name: c16k_d4_b4_ttl0.6, ctx: 16384, delay_scale: 4.0, k: 16, policy: ttl_off, kvm: {omega: 1.0, ttl_x: 0.6}}
+  - {name: c16k_d4_b4_ttl1.25, ctx: 16384, delay_scale: 4.0, k: 16, policy: ttl_off, kvm: {omega: 1.0, ttl_x: 1.25}, reps: 2}
+  - {name: c16k_d4_b4_ttl2.5, ctx: 16384, delay_scale: 4.0, k: 16, policy: ttl_off, kvm: {omega: 1.0, ttl_x: 2.5}}
+  - {name: c16k_d4_b5, ctx: 16384, delay_scale: 4.0, k: 16, policy: always_off, kvm: {omega: 1.0}, reps: 2}
+  # --- 8k x4 ---
+  - {name: c8k_d4_b1, ctx: 8192, delay_scale: 4.0, k: 4, policy: observe, reps: 2}
+  - {name: c8k_d4_b2, ctx: 8192, delay_scale: 4.0, k: 6, policy: observe, pin: false, parallel: k, cache_ram: 448, reps: 2}
+  - {name: c8k_d4_ours, ctx: 8192, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}, reps: 2}
+  - {name: c8k_d4_ours_h0, ctx: 8192, delay_scale: 4.0, k: 16, policy: ours_h0, kvm: {omega: 1.0}, reps: 2}
+  - {name: c8k_d4_b4_ttl1.25, ctx: 8192, delay_scale: 4.0, k: 16, policy: ttl_off, kvm: {omega: 1.0, ttl_x: 1.25}, reps: 2}
+  - {name: c8k_d4_b5, ctx: 8192, delay_scale: 4.0, k: 16, policy: always_off, kvm: {omega: 1.0}, reps: 2}
+  # --- 32k x4 (no-benefit: active-request compute plateau) ---
+  - {name: c32k_d4_b1, ctx: 32768, delay_scale: 4.0, k: 12, policy: observe}
+  - {name: c32k_d4_b2, ctx: 32768, delay_scale: 4.0, k: 16, policy: observe, pin: false, parallel: k, cache_ram: 1792}
+  - {name: c32k_d4_ours, ctx: 32768, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}}

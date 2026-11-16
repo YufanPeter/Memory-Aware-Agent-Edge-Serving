@@ -1,0 +1,13 @@
+# A third rep at the headline point (16k x4) and at 32k x4, where the Welch test with n = 2 per
+# side could not separate ours from B1 (docs/phase2_details.md §4.5 decision rule). Same sweep
+# name and point names as p2_main, so the sweep skips rep0/rep1 and runs rep2 only.
+name: p2_main
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 3, policy: observe}
+points:
+  - {name: c16k_d4_b1_k4, ctx: 16384, delay_scale: 4.0, k: 4}
+  - {name: c16k_d4_ours, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}}
+  - {name: c16k_d4_b1_k6, ctx: 16384, delay_scale: 4.0, k: 6}
+  - {name: c16k_d4_ours_h0, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours_h0, kvm: {omega: 1.0}}
+  - {name: c16k_d4_b2_k6, ctx: 16384, delay_scale: 4.0, k: 6, cache_ram: 896, pin: false, parallel: k}
+  - {name: c32k_d4_b1_k8, ctx: 32768, delay_scale: 4.0, k: 8}
+  - {name: c32k_d4_ours, ctx: 32768, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 0.5}}

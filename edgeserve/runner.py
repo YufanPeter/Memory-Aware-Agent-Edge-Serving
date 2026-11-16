@@ -8,6 +8,17 @@ task's whole conversation stays in one slot's KV cache while it waits for tools.
     uv run python -m edgeserve.runner --workload workloads/smoke.json --k 4 --out results/smoke_k4
     uv run python -m edgeserve.runner --workload workloads/smoke.json --k 2 --mock   # no server needed
 
+Phase 2: `--policy NAME` (a preset of configs/kvm.yaml, overrides via --kvm JSON) puts the KV
+manager (edgeserve/kvm.py) between the agents and the server: admission by FIFO ticket, the
+dispatch gate, the slot lifecycle, and exact KV accounting in kv_* events. `--k` is then the
+fixed K, or K_max for KV admission. `--mock --mock-capacity N` replaces the server with
+MockPoolLLM, a bounded KV cell pool with slot actions, so every preset runs on a laptop:
+
+    uv run python -m edgeserve.runner --workload workloads/smoke.json --k 8 --policy ours \
+        --mock --mock-capacity 4096 --out results/mock_ours
+
+Without --policy and --mock-capacity the runner behaves exactly as in Phase 1.
+
 Outputs in --out: events.jsonl, tasks.jsonl, meta.json, summary.json.
 """
 from __future__ import annotations
@@ -15,6 +26,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import itertools
 import json
 import platform
 import re
@@ -22,6 +34,7 @@ import shutil
 import statistics
 import subprocess
 import time
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -33,9 +46,14 @@ from edgeserve.corpus import Corpus
 from edgeserve.data import load_split
 from edgeserve.eval import exact_match, f1_score, sf_recall
 from edgeserve.events import EventLog
-from edgeserve.llm import LlamaServerClient, MockLLM
+from edgeserve.kvm import KVManager, ManagedLLM
+from edgeserve.llm import LlamaServerClient, MockLLM, SlotControl
+from edgeserve.mockpool import MockPoolLLM
+from edgeserve.policies import KVM_CONFIG_PATH, load_policy
 from edgeserve.profiles import PROFILES_PATH, load_profiles
 from edgeserve.workload import load_workload
+
+LLAMA_CACHE_RAM_DEFAULT = 8192.0   # MiB: llama-server enables its host prompt cache unless told otherwise
 
 
 def mock_script(prompt: str) -> str:
@@ -49,6 +67,29 @@ def mock_script(prompt: str) -> str:
     if "Context:\n" in prompt or n_obs >= 1:
         return f" I have enough information.\nAction {n_obs + 1}: finish[{entity}]"
     return f" I need to search {entity}.\nAction 1: search[{entity}]\nObservation"
+
+
+def server_flag(cmd: str, *flags: str) -> str | None:
+    """Value of a llama-server flag in a server_cmd.txt line (last occurrence wins)."""
+    toks = cmd.split()
+    val = None
+    for i, tok in enumerate(toks):
+        for f in flags:
+            if tok == f and i + 1 < len(toks):
+                val = toks[i + 1]
+            elif tok.startswith(f + "="):
+                val = tok.split("=", 1)[1]
+    return val
+
+
+def cache_ram_mib(cmd: str) -> float:
+    v = server_flag(cmd, "--cache-ram", "-cram")
+    return float(v) if v is not None else LLAMA_CACHE_RAM_DEFAULT
+
+
+def kv_status(status: str, error: str | None) -> str:
+    """The gate refuses a context that cannot fit (tok(P) >= c - m): a failure of its own kind."""
+    return "kv_infeasible" if status == "ctx_overflow" and (error or "").startswith("kv_infeasible") else status
 
 
 def _git_rev() -> str:
@@ -159,18 +200,70 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     items = {it.id: it for it in load_split(wl["meta"].get("split", "dev"))}
     corpus = Corpus.load(with_bm25=True)   # search suggestions and react_long neighbors
 
+    server_cmd = (out / "server_cmd.txt").read_text(encoding="utf-8").strip() \
+        if (out / "server_cmd.txt").exists() else None   # written by scripts/sweep.py or start_server.sh
+    cfg = None
+    if args.policy:
+        overrides = json.loads(args.kvm) if args.kvm else {}
+        cfg = load_policy(args.policy, overrides, args.kvm_config)
+        cfg.k, cfg.pinned, cfg.delay_scale = args.k, args.pin, args.delay_scale
+        if cfg.lifecycle != "observe" and not args.pin:
+            raise SystemExit(f"policy {args.policy}: the managed and server lifecycles need pinned slots")
+        if server_cmd and "slot_dir" not in overrides and (sp := server_flag(server_cmd, "--slot-save-path")):
+            cfg.slot_dir = sp
+    # --cache-ram with cache_idle_slots saves and clears every idle slot at each launch, and a
+    # pinned request to a cleared slot never reloads (f_keep = 0/0 = NaN, sc:1853): spec §5.
+    if server_cmd and not args.mock and (args.pin or (cfg and cfg.lifecycle != "observe")):
+        if cache_ram_mib(server_cmd) != 0:
+            raise SystemExit("refusing a pinned or managed run against a server with --cache-ram != 0 "
+                             f"({cache_ram_mib(server_cmd):g} MiB): {server_cmd}")
+
     llm: Any
-    if args.mock:
+    ctl: Any = None
+    pool: MockPoolLLM | None = None
+    if args.mock and (cfg is not None or args.mock_capacity is not None):
+        capacity = args.mock_capacity or (cfg.ctx if cfg and cfg.ctx else None)
+        if cfg is not None and not capacity:
+            raise SystemExit("--policy with --mock needs --mock-capacity (or ctx in --kvm)")
+        slot_dir = out / "mock_slots"
+        slot_dir.mkdir(exist_ok=True)
+        for f in slot_dir.glob("*.bin"):
+            f.unlink()
+        pool = MockPoolLLM(mock_script, capacity=capacity, n_slots=args.mock_slots, t_prefill=args.mock_prefill_s,
+                           t_decode=args.mock_decode_s, cache_ram_mib=args.mock_cache_ram, slot_dir=slot_dir,
+                           op_timeout_s=cfg.op_timeout_s if cfg else 5.0)
+        llm = ctl = pool
+        if cfg is not None:
+            cfg.slot_dir, cfg.cache_ram_mib = str(slot_dir), args.mock_cache_ram
+    elif args.mock:
         llm = MockLLM(mock_script, prefill_s_per_token=1e-5, decode_s_per_token=1e-3)
     else:
         llm = LlamaServerClient(args.base_url, seed=args.seed, cache_prompt=not args.no_cache)
+        if cfg is not None:
+            ctl = SlotControl(args.base_url, op_timeout_s=cfg.op_timeout_s)
+            if server_cmd and "cache_ram_mib" not in overrides:   # B2's HOST_CACHED sub-mode needs it
+                cfg.cache_ram_mib = cache_ram_mib(server_cmd)
     props = await llm.props()
     total_slots = props.get("total_slots")
     if args.pin and total_slots is not None and args.k > total_slots:
         raise SystemExit(f"K={args.k} but the server has only {total_slots} slots (--parallel)")
 
     events = EventLog(out / "events.jsonl")
-    agent = Agent(llm, corpus, events, seed=args.seed, delay_scale=args.delay_scale)
+    kvm: KVManager | None = None
+    if cfg is not None:
+        n_ctx = int((props.get("default_generation_settings") or {}).get("n_ctx") or 0)
+        if not cfg.ctx:
+            cfg.ctx = n_ctx
+        elif n_ctx and n_ctx != cfg.ctx:
+            raise SystemExit(f"/props n_ctx {n_ctx} != kvm ctx {cfg.ctx}")
+        if not cfg.ctx:
+            raise SystemExit("no KV budget: the server reports no n_ctx and --kvm has no ctx")
+        if not args.pin:   # B2 observe learns each request's slot from the stream
+            llm.return_progress = True
+        kvm = KVManager(ctl, events, cfg, llm, profiles=profiles)
+        events.listeners.append(kvm.on_event)
+    agent = Agent(ManagedLLM(llm, kvm) if kvm else llm, corpus, events, seed=args.seed,
+                  delay_scale=args.delay_scale)
     queue: asyncio.Queue = asyncio.Queue()
     rows: list[dict[str, Any]] = []
     tasks_f = open(out / "tasks.jsonl", "w", buffering=1, encoding="utf-8", newline="\n")
@@ -185,13 +278,19 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         for _ in range(args.k):
             await queue.put(None)
 
+    tickets = itertools.count()
+
     async def worker(k: int) -> None:
         slot = k if args.pin else -1
         while (entry := await queue.get()) is not None:
             t, t_arrive = entry
+            ticket = next(tickets)   # FIFO order of admission (head-of-line blocking in the manager)
+            if kvm is not None:
+                slot = await kvm.admit(t["task_id"], t["profile"], ticket, worker=k)
             t_admit = time.monotonic()
             events.emit("task_admit", task_id=t["task_id"], worker=k, slot=slot)
             item = items[t["qid"]]
+            trace: TaskTrace | None = None
             try:
                 trace = await asyncio.wait_for(agent.run(t["task_id"], item, profiles[t["profile"]], slot),
                                                args.task_timeout)
@@ -200,6 +299,12 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             except Exception as e:   # one broken task must not abort the whole run
                 trace = TaskTrace(t["task_id"], item.id, t["profile"], item.qtype, slot, status="error",
                                   error=f"{type(e).__name__}: {e}"[:500])
+            finally:
+                if kvm is not None:   # shielded: the slot's ledger entry must be settled either way
+                    trace_status = trace.status if trace is not None else "cancelled"
+                    await asyncio.shield(kvm.release(t["task_id"], trace_status))
+            if kvm is not None:
+                trace.status = kv_status(trace.status, trace.error)
             t_done = time.monotonic()
             row = {
                 "task_id": t["task_id"], "qid": item.id, "profile": t["profile"], "qtype": item.qtype,
@@ -211,6 +316,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                 "latency_s": round(t_done - t_arrive, 4), "service_s": round(t_done - t_admit, 4),
                 "n_llm_calls": len(trace.steps), "trace": trace.to_dict(),
             }
+            if kvm is not None:
+                row["kv"] = kvm.task_stats(t["task_id"])
             rows.append(row)
             tasks_f.write(json.dumps(row, ensure_ascii=False) + "\n")
             events.emit("task_done", task_id=t["task_id"], status=trace.status, em=row["em"], f1=row["f1"])
@@ -218,14 +325,20 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     stop = asyncio.Event()
     mon = asyncio.create_task(_monitor(events, None if args.mock else args.base_url,
                                        args.server_pid, args.sample_interval, stop))
+    if kvm is not None:
+        await kvm.start()
     t0 = time.monotonic()
     await asyncio.gather(arrive(), *(worker(k) for k in range(args.k)))
     makespan = time.monotonic() - t0
+    if kvm is not None:
+        await kvm.close()
     stop.set()
     await mon
     events.close()
     tasks_f.close()
     await llm.close()
+    if ctl is not None and ctl is not llm:
+        await ctl.close()
 
     meta = {
         "workload": args.workload, "workload_sha": hashlib.sha256(wl_text.encode()).hexdigest()[:16],
@@ -237,10 +350,19 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         "git_rev": _git_rev(), "host": platform.node(), "platform": platform.platform(),
         "started_wall": events.wall0,
     }
-    if (out / "server_cmd.txt").exists():   # written by scripts/sweep.py or start_server.sh
-        meta["server_cmd"] = (out / "server_cmd.txt").read_text(encoding="utf-8").strip()
+    if server_cmd is not None:
+        meta["server_cmd"] = server_cmd
+    if cfg is not None:
+        meta["kvm"] = asdict(cfg) | {"policy": args.policy, "kvm_config": args.kvm_config}
+    if pool is not None:
+        meta["mock_pool"] = {"capacity": pool.capacity, "n_slots": pool.n_slots, "t_prefill": pool.t_prefill,
+                             "t_decode": pool.t_decode, "cache_ram_mib": pool.cache_ram_mib}
     (out / "meta.json").write_text(json.dumps(meta, indent=1, default=str), encoding="utf-8", newline="\n")
     summary = summarize(rows, makespan)
+    if kvm is not None:
+        summary["kv"] = kvm.summary()
+    if pool is not None:
+        summary["mock_pool"] = pool.counters()
     (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8", newline="\n")
     return summary
 
@@ -260,6 +382,14 @@ def main() -> None:
     ap.add_argument("--server-pid", type=int, help="sample this process's RSS")
     ap.add_argument("--sample-interval", type=float, default=1.0)
     ap.add_argument("--mock", action="store_true", help="use the scripted MockLLM instead of a server")
+    ap.add_argument("--policy", help="KV manager preset from --kvm-config (Phase 2); none: Phase 1 runner")
+    ap.add_argument("--kvm", default="{}", help="JSON overrides of the preset's KVConfig fields")
+    ap.add_argument("--kvm-config", default=str(KVM_CONFIG_PATH))
+    ap.add_argument("--mock-capacity", type=int, help="with --mock: a bounded MockPoolLLM of this many KV cells")
+    ap.add_argument("--mock-slots", type=int, default=64)
+    ap.add_argument("--mock-prefill-s", type=float, default=1e-5, help="MockPoolLLM seconds per prefill token")
+    ap.add_argument("--mock-decode-s", type=float, default=1e-3, help="MockPoolLLM seconds per decoded token")
+    ap.add_argument("--mock-cache-ram", type=float, default=0.0, help="MockPoolLLM --cache-ram emulation (MiB)")
     args = ap.parse_args()
     print(json.dumps(asyncio.run(run(args)), indent=1))
 

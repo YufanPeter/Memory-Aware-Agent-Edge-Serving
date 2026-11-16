@@ -1,0 +1,9 @@
+# Phase 2 main workload (P1-dev, P2, ω/2x2 fresh reps): every dev question, the E2 long-context
+# mix (70% react_long, 30% react_short), all arriving at t=0 (closed loop with the admitted agents).
+# Same mix as p1_long_200, which stays the tuning (perf) workload; dev is held out from tuning.
+name: dev_long_200
+split: dev
+n_tasks: 200
+seed: 0
+mix: {react_long: 0.7, react_short: 0.3}
+arrival: {type: batch}

@@ -1,0 +1,7 @@
+# Phase 2 P4 (no-benefit regime): every dev question, react_short only, all at t=0.
+name: dev_short_200
+split: dev
+n_tasks: 200
+seed: 0
+mix: {react_short: 1.0}
+arrival: {type: batch}

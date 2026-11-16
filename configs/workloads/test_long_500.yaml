@@ -1,0 +1,7 @@
+# Phase 2 confirmation workload (P1-test): every test question, the long mix, all at t=0.
+name: test_long_500
+split: test
+n_tasks: 500
+seed: 0
+mix: {react_long: 0.7, react_short: 0.3}
+arrival: {type: batch}

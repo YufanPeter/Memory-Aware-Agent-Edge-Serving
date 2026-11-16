@@ -32,7 +32,12 @@ case "${1:-status}" in
     ;;
   push)
     rev=$(git rev-parse HEAD 2>/dev/null || echo unknown)
-    git diff --quiet HEAD 2>/dev/null || rev="$rev+dirty"
+    # Uncommitted code: tag the revision with a hash of the diff and the untracked files, so
+    # every run's meta.json names the exact code that produced it.
+    if ! git diff --quiet HEAD 2>/dev/null || [ -n "$(git ls-files -o --exclude-standard)" ]; then
+      h=$( (git diff HEAD; git ls-files -o --exclude-standard -z | xargs -0 cat) | shasum | cut -c1-12)
+      rev="$rev+dirty-$h"
+    fi
     echo "$rev" > REVISION
     rsync -az --exclude .git --exclude data --exclude models --exclude results --exclude .venv \
       --exclude __pycache__ ./ mem-aws:~/mem-aware/

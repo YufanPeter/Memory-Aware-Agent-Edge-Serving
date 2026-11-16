@@ -1,0 +1,11 @@
+# P4 no-benefit regimes (docs/phase2_spec.md §8.2, 11/27): ample memory (64k x1: B1 at K=16,
+# where E2 c64k gave 47.3 tasks/min; ours with K_max = 8) and a short-only mix at 16k x1
+# (dev_short_200, where idle KV is small). 4 runs. Predicted: ours ≈ B1 in both.
+# PLACEHOLDERS: B1 K for short-only (4, the long mix's 16k x1 K), omega.
+name: p4
+defaults: {parallel: 64, reps: 1, delay_scale: 1.0}
+points:
+  - {name: c64k_d1_b1, workload: workloads/dev_long_200.json, ctx: 65536, k: 16, policy: observe}
+  - {name: c64k_d1_ours, workload: workloads/dev_long_200.json, ctx: 65536, k: 8, policy: ours, kvm: {omega: 1.0}}
+  - {name: short_c16k_d1_b1, workload: workloads/dev_short_200.json, ctx: 16384, k: 4, policy: observe}
+  - {name: short_c16k_d1_ours, workload: workloads/dev_short_200.json, ctx: 16384, k: 8, policy: ours, kvm: {omega: 1.0}}

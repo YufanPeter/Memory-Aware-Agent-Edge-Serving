@@ -1,0 +1,18 @@
+# 2x2 admission x lifecycle decomposition at 16k x4 (docs/phase2_spec.md §8.1), dev_long_200,
+# 3 reps, each cell at its best knob from the perf tuning (p2_tune, p2_tune_v2; steady tasks/min):
+#   gated_k     fixed K, active gate, llama.cpp purge:   K = 4/6/8/10 -> 21.6/24.6/19.8/16.8  => K = 6
+#   managed_k   fixed K, full gate, managed lifecycle:   K = 4/6/8/10 -> 21.9/26.2/26.4/25.4  => K = 8
+#   adm_retain  KV admission, active gate, llama.cpp purge (fixed gate): omega 0.5/1/2 -> 22.8/21.8/15.6 => 0.5
+#   ours        KV admission, managed lifecycle: omega 1 (p2_main c16k_d4_ours, 3 reps with p2_main_rep3)
+name: p2_2x2
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 3, ctx: 16384, delay_scale: 4.0}
+points:
+  - {name: c16k_d4_gatedk_k6, k: 6, policy: gated_k}
+  - {name: c16k_d4_managedk_k8, k: 8, policy: managed_k}
+  - {name: c16k_d4_admret_w0.5, k: 16, policy: adm_retain, kvm: {omega: 0.5}}
+  # Ablation follow-up: act_offload (offload every victim, never drop) beat ours in its single
+  # p2_ablate run (31.6 vs 28.6-29.2 steady tasks/min); 3 more reps to see whether the cost
+  # rule's offload/drop choice really loses at this point.
+  - {name: c16k_d4_act_offload, k: 16, policy: act_offload, kvm: {omega: 1.0}}
+  # Same for always_off (proactive offload at every tool start): 31.6 in its single p2_ablate run.
+  - {name: c16k_d4_always_off, k: 16, policy: always_off, kvm: {omega: 1.0}}

@@ -1,0 +1,15 @@
+# Re-tune adm_retain on perf after the active-gate fix (kvm.py active_charge / _deficit count a
+# reused slot at max(s, f)). The first three adm_retain points in p2_tune ran without the fix
+# (one overflowed 3 times) and are not used. Same sweep name, so results sit next to p2_tune's.
+name: p2_tune
+defaults: {workload: workloads/p1_long_200.json, parallel: 64, reps: 1, policy: adm_retain, ctx: 16384,
+           delay_scale: 4.0, k: 16}
+points:
+  - {name: c16k_d4_admret_v2_w0.5, kvm: {omega: 0.5}}
+  - {name: c16k_d4_admret_v2_w1, kvm: {omega: 1.0}}
+  - {name: c16k_d4_admret_v2_w2, kvm: {omega: 2.0}}
+  # managed_k at the K where gated_k (llama.cpp's purge) starts to thrash: gated_k gave
+  # 24.6 tasks/min at K = 6 and 19.8 at K = 8 with 362 purges.
+  - {name: c16k_d4_managedk_k8, policy: managed_k, k: 8, kvm: {}}
+  - {name: c16k_d4_managedk_k10, policy: managed_k, k: 10, kvm: {}}
+  - {name: c16k_d4_gatedk_k10, policy: gated_k, k: 10, kvm: {}}

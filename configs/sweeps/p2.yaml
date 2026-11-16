@@ -1,0 +1,29 @@
+# P2 (docs/phase2_spec.md §8.1-8.2, 11/22-24): fresh dev reps of the tuned 2x2 knobs, and the
+# ablations at 16k x4. 26 runs.
+# 2x2 cells at 16k x4 and 8k x1, 2 reps each; the `sched` cell (the better of gated_k and
+# adm_retain on perf) gets 3. PLACEHOLDER: sched is written as adm_retain here; if gated_k won
+# tune_2x2, swap the policies of *_sched and *_gatedk (and set the other one's knob). Knobs (K,
+# omega) are placeholders until tune_2x2 / tune_omega. Ours/B1 rows of the 2x2 are p1_dev's.
+# Ablations (1 rep; lazy and nosteal 2): each changes one rule of ours and keeps ours' omega.
+# adm_duty runs at theta 0.8 (the preset); theta 0.6 is the optional second point.
+# Cut order if behind (spec §8.2): clairvoyant_pf, clairvoyant, adm_duty, then h / victim / act_*.
+name: p2
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 1}
+points:
+  - {name: c16k_d4_sched, ctx: 16384, delay_scale: 4.0, k: 16, policy: adm_retain, kvm: {omega: 1.0}, reps: 3}
+  - {name: c16k_d4_gatedk, ctx: 16384, delay_scale: 4.0, k: 12, policy: gated_k, reps: 2}
+  - {name: c16k_d4_managedk, ctx: 16384, delay_scale: 4.0, k: 12, policy: managed_k, reps: 2}
+  - {name: c8k_d1_sched, ctx: 8192, delay_scale: 1.0, k: 8, policy: adm_retain, kvm: {omega: 1.0}, reps: 3}
+  - {name: c8k_d1_gatedk, ctx: 8192, delay_scale: 1.0, k: 3, policy: gated_k, reps: 2}
+  - {name: c8k_d1_managedk, ctx: 8192, delay_scale: 1.0, k: 3, policy: managed_k, reps: 2}
+  # --- ablations at 16k x4 ---
+  - {name: c16k_d4_lazy, ctx: 16384, delay_scale: 4.0, k: 16, policy: lazy, kvm: {omega: 1.0}, reps: 2}
+  - {name: c16k_d4_nosteal, ctx: 16384, delay_scale: 4.0, k: 16, policy: nosteal, kvm: {omega: 1.0}, reps: 2}
+  - {name: c16k_d4_victim_lowid, ctx: 16384, delay_scale: 4.0, k: 16, policy: victim_lowid, kvm: {omega: 1.0}}
+  - {name: c16k_d4_act_erase, ctx: 16384, delay_scale: 4.0, k: 16, policy: act_erase, kvm: {omega: 1.0}}
+  - {name: c16k_d4_act_offload, ctx: 16384, delay_scale: 4.0, k: 16, policy: act_offload, kvm: {omega: 1.0}}
+  - {name: c16k_d4_h0.5, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0, host_frac: 0.5}}
+  - {name: c16k_d4_h2, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0, host_frac: 2.0}}
+  - {name: c16k_d4_adm_duty, ctx: 16384, delay_scale: 4.0, k: 16, policy: adm_duty, kvm: {theta: 0.8}}
+  - {name: c16k_d4_r1, ctx: 16384, delay_scale: 4.0, k: 16, policy: clairvoyant, kvm: {omega: 1.0}}
+  - {name: c16k_d4_r1_pf, ctx: 16384, delay_scale: 4.0, k: 16, policy: clairvoyant_pf, kvm: {omega: 1.0}}

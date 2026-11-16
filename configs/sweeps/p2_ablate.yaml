@@ -1,0 +1,28 @@
+# P2 ablations at the headline point 16k x4 (docs/phase2_spec.md §8.1), dev_long_200, 1 rep each,
+# with ours' tuned knobs (omega 1, k = K_max 16). Each changes one rule of ours:
+#   timing: lazy (T* = 0), nosteal (T* = inf), ttl_off (B4: proactive offload after a TTL),
+#           always_off (B5: offload at every tool start), clairvoyant (knows the true delays),
+#           oracle_prior (victim ranking from the generator's delay distribution)
+#   action: act_erase (no prefix kept), act_offload (always offload, never drop)
+#   victim: victim_lowid (llama.cpp's order: lowest slot id)
+# Plus the ample-memory no-benefit check at 131k x1: B1 K = 8 (E1's best) vs ours (k 8, omega 0.5).
+name: p2_ablate
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 1, ctx: 16384, delay_scale: 4.0, k: 16,
+           kvm: {omega: 1.0}}
+points:
+  - {name: c16k_d4_lazy, policy: lazy}
+  - {name: c16k_d4_nosteal, policy: nosteal}
+  - {name: c16k_d4_act_erase, policy: act_erase}
+  - {name: c16k_d4_act_offload, policy: act_offload}
+  - {name: c16k_d4_victim_lowid, policy: victim_lowid}
+  - {name: c16k_d4_always_off, policy: always_off}
+  - {name: c16k_d4_ttl_off, policy: ttl_off}
+  - {name: c16k_d4_clairvoyant, policy: clairvoyant}
+  - {name: c16k_d4_oracle_prior, policy: oracle_prior}
+  - {name: c131k_d1_b1_k8, ctx: 131072, delay_scale: 1.0, k: 8, policy: observe, kvm: {}}
+  - {name: c131k_d1_ours, ctx: 131072, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 0.5}}
+  # Main-table cells missing from p2_main: B2 at 8k x1 (tuned in p2_tune: K = 2 178/200, K = 3
+  # 102/200), and B1's highest-goodput K at 16k x1 (K = 5 on perf; p2_main has K = 3 and 4).
+  - {name: c16k_d1_b1_k5, ctx: 16384, delay_scale: 1.0, k: 5, policy: observe, kvm: {}, reps: 2}
+  - {name: c8k_d1_b2_k2, ctx: 8192, delay_scale: 1.0, k: 2, policy: observe, kvm: {}, cache_ram: 448, pin: false,
+     parallel: k, reps: 2}

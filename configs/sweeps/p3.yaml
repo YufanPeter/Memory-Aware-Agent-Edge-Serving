@@ -1,0 +1,47 @@
+# P3 (docs/phase2_spec.md §8.2, 11/25-26): generality at 16k, all knobs frozen. 30 runs.
+# (1) Delay scale {0, 0.5, 2, 8} on dev_long_200: B1 and ours; ours_h0 at {2, 8}. B1's K: its x1
+#     best K (4) at 0 and 0.5; at 2 and 8 the active-request model's K (spec §1: K = A(4r +
+#     2.25·scale)/4r with A = 2.5, r = 0.95 s -> 5.5 and 14.4) and one neighbour; the better
+#     is used. ours: k = K_max (8 at x1 and below; 16 placeholder above x1).
+# (2) The Phase 1 default mix (dev_mixed_200) at 16k x1 and x4: B1, B2, ours.
+# (3) Open loop at 16k x4 (latency claims come only from these): Poisson at 0.6 x and 0.85 x
+#     B1's steady throughput for B1, B2, ours, and at 0.85 x ours' capacity for B2 and ours.
+#     The workload rates are PLACEHOLDERS from the predicted capacities (spec §1); regenerate the
+#     dev_long_poisson_r* files from P1-dev's measured c16k_d4 throughput and update these paths.
+# (4) GPU KV saved: ours and B1 (best K) at 24k x4, 2 reps each, against B1 at 32k x4 (p1_dev).
+# PLACEHOLDERS: K values, K_max at x4, omega (frozen winners from P0b / tune_omega).
+name: p3
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 1}
+points:
+  # --- (1) delay scale ---
+  - {name: c16k_d0_b1, ctx: 16384, delay_scale: 0.0, k: 4, policy: observe}
+  - {name: c16k_d0_ours, ctx: 16384, delay_scale: 0.0, k: 8, policy: ours, kvm: {omega: 1.0}}
+  - {name: c16k_d0.5_b1, ctx: 16384, delay_scale: 0.5, k: 4, policy: observe}
+  - {name: c16k_d0.5_ours, ctx: 16384, delay_scale: 0.5, k: 8, policy: ours, kvm: {omega: 1.0}}
+  - {name: c16k_d2_b1_k6, ctx: 16384, delay_scale: 2.0, k: 6, policy: observe}
+  - {name: c16k_d2_b1_k5, ctx: 16384, delay_scale: 2.0, k: 5, policy: observe}
+  - {name: c16k_d2_ours, ctx: 16384, delay_scale: 2.0, k: 16, policy: ours, kvm: {omega: 1.0}}
+  - {name: c16k_d2_ours_h0, ctx: 16384, delay_scale: 2.0, k: 16, policy: ours_h0, kvm: {omega: 1.0}}
+  - {name: c16k_d8_b1_k14, ctx: 16384, delay_scale: 8.0, k: 14, policy: observe}
+  - {name: c16k_d8_b1_k12, ctx: 16384, delay_scale: 8.0, k: 12, policy: observe}
+  - {name: c16k_d8_ours, ctx: 16384, delay_scale: 8.0, k: 16, policy: ours, kvm: {omega: 1.0}}
+  - {name: c16k_d8_ours_h0, ctx: 16384, delay_scale: 8.0, k: 16, policy: ours_h0, kvm: {omega: 1.0}}
+  # --- (2) default mix ---
+  - {name: mix_c16k_d1_b1, workload: workloads/dev_mixed_200.json, ctx: 16384, delay_scale: 1.0, k: 4, policy: observe}
+  - {name: mix_c16k_d1_b2, workload: workloads/dev_mixed_200.json, ctx: 16384, delay_scale: 1.0, k: 6, policy: observe, pin: false, parallel: k, cache_ram: 896}
+  - {name: mix_c16k_d1_ours, workload: workloads/dev_mixed_200.json, ctx: 16384, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 1.0}}
+  - {name: mix_c16k_d4_b1, workload: workloads/dev_mixed_200.json, ctx: 16384, delay_scale: 4.0, k: 8, policy: observe}
+  - {name: mix_c16k_d4_b2, workload: workloads/dev_mixed_200.json, ctx: 16384, delay_scale: 4.0, k: 9, policy: observe, pin: false, parallel: k, cache_ram: 896}
+  - {name: mix_c16k_d4_ours, workload: workloads/dev_mixed_200.json, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}}
+  # --- (3) open loop at 16k x4 ---
+  - {name: pois0.6b1_c16k_d4_b1, workload: workloads/dev_long_poisson_r0.31.json, ctx: 16384, delay_scale: 4.0, k: 8, policy: observe}
+  - {name: pois0.6b1_c16k_d4_b2, workload: workloads/dev_long_poisson_r0.31.json, ctx: 16384, delay_scale: 4.0, k: 9, policy: observe, pin: false, parallel: k, cache_ram: 896}
+  - {name: pois0.6b1_c16k_d4_ours, workload: workloads/dev_long_poisson_r0.31.json, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}}
+  - {name: pois0.85b1_c16k_d4_b1, workload: workloads/dev_long_poisson_r0.44.json, ctx: 16384, delay_scale: 4.0, k: 8, policy: observe}
+  - {name: pois0.85b1_c16k_d4_b2, workload: workloads/dev_long_poisson_r0.44.json, ctx: 16384, delay_scale: 4.0, k: 9, policy: observe, pin: false, parallel: k, cache_ram: 896}
+  - {name: pois0.85b1_c16k_d4_ours, workload: workloads/dev_long_poisson_r0.44.json, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}}
+  - {name: pois0.85ours_c16k_d4_b2, workload: workloads/dev_long_poisson_r0.47.json, ctx: 16384, delay_scale: 4.0, k: 9, policy: observe, pin: false, parallel: k, cache_ram: 896}
+  - {name: pois0.85ours_c16k_d4_ours, workload: workloads/dev_long_poisson_r0.47.json, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}}
+  # --- (4) GPU KV saved: 24k x4 ---
+  - {name: c24k_d4_b1, ctx: 24576, delay_scale: 4.0, k: 10, policy: observe, reps: 2}
+  - {name: c24k_d4_ours, ctx: 24576, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}, reps: 2}

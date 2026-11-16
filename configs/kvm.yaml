@@ -1,0 +1,28 @@
+# KV manager presets (docs/phase2_spec.md §6.4, configurations §8.1). The runner loads one with
+# --policy NAME; --kvm '{"omega": 0.5, ...}' overrides fields of edgeserve.kvm.KVConfig, and
+# `ctx` (the -c budget) is asserted against the server's /props. --k is the fixed K, or K_max
+# for kv / duty admission.
+#
+# Each lifecycle has one gate: observe -> none (Phase 1 baselines, the manager only accounts),
+# server -> active (llama.cpp's own purge reclaims idle KV; retain + the full gate deadlocks),
+# managed -> full (our lifecycle: no overflow and no server purge by construction).
+defaults: {margin: 128, gate: full, admission: kv, omega: 1.0, peak_q: 0.9, lifecycle: managed,
+           timing: pressure_ttl, victim: residual, actions: cost, host_frac: 1.0}
+presets:
+  observe:      {lifecycle: observe, gate: none, admission: fixed}      # B1 (pinned), B2 (--no-pin), B3
+  gated_k:      {lifecycle: server, gate: active, admission: fixed}     # 2x2: fixed K, llama.cpp lifecycle
+  adm_retain:   {lifecycle: server, gate: active}                       # 2x2: KV admission, llama.cpp lifecycle
+  managed_k:    {admission: fixed}                                      # 2x2: fixed K, managed lifecycle
+  ours:         {}                                                      # KV admission + managed lifecycle
+  ours_h0:      {host_frac: 0}                                          # drop to prefix only, no host tier
+  ttl_off:      {timing: fixed_ttl, ttl_x: 1.25, actions: offload}      # B4 (line: ttl_x 0.6 / 1.25 / 2.5)
+  always_off:   {timing: always, actions: offload}                      # B5
+  clairvoyant:  {timing: clairvoyant}                                   # R1 (no prefetch)
+  clairvoyant_pf: {timing: clairvoyant_pf}                              # R1 + prefetch (optional)
+  oracle_prior: {delay_model: oracle_prior}                             # P5
+  lazy:         {timing: lazy}
+  nosteal:      {timing: nosteal}
+  victim_lowid: {victim: lowest_id}
+  act_erase:    {actions: erase}
+  act_offload:  {actions: offload}
+  adm_duty:     {admission: duty, theta: 0.8}

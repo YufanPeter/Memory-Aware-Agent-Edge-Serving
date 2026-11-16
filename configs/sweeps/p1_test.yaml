@@ -1,0 +1,14 @@
+# P1-test confirmation (docs/phase2_spec.md §8.2, 11/28-30): test_long_500 (every test question,
+# long mix, t=0) at the two headline cells, B1 / B2 / ours x 2 reps, plus sched at 16k x4 x 2.
+# 14 runs. Quality TOST margin 0.03 here (analysis.stats --margin 0.03).
+# PLACEHOLDERS: K values, K_max at x4, omega, and sched's policy/knob (see p2.yaml).
+name: p1_test
+defaults: {workload: workloads/test_long_500.json, parallel: 64, reps: 2}
+points:
+  - {name: c16k_d4_b1, ctx: 16384, delay_scale: 4.0, k: 8, policy: observe}
+  - {name: c16k_d4_b2, ctx: 16384, delay_scale: 4.0, k: 9, policy: observe, pin: false, parallel: k, cache_ram: 896}
+  - {name: c16k_d4_ours, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}}
+  - {name: c16k_d4_sched, ctx: 16384, delay_scale: 4.0, k: 16, policy: adm_retain, kvm: {omega: 1.0}}
+  - {name: c8k_d1_b1, ctx: 8192, delay_scale: 1.0, k: 2, policy: observe}
+  - {name: c8k_d1_b2, ctx: 8192, delay_scale: 1.0, k: 4, policy: observe, pin: false, parallel: k, cache_ram: 448}
+  - {name: c8k_d1_ours, ctx: 8192, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 1.0}}

@@ -1,0 +1,26 @@
+# 2x2 knob tuning (docs/phase2_spec.md §8.1, §8.2, 11/18-19) at 16k x4 and 8k x1, on perf:
+#   gated_k    fixed K, active gate, llama.cpp purge: K in {B1 best, 1.5x, 2x}
+#   adm_retain KV admission, active gate, llama.cpp purge: omega in {0.5, 1, 2}, k = K_max
+#   managed_k  fixed K, full gate, managed lifecycle: K in {B1 best, 1.5x}
+# B1 best K placeholders: 8 at 16k x4 (active-request model, spec §1; P0b measures it) and 2 at
+# 8k x1 (E2b; P0 c8k_k3 completed only 124/200). K_max: 16 at x4 (placeholder), 8 at x1.
+# The better of gated_k / adm_retain is `sched`, the scheduling-only reference. Never reported.
+name: tune_2x2
+defaults: {workload: workloads/p1_long_200.json, parallel: 64, reps: 1}
+points:
+  - {name: c16k_d4_gatedk_k8, ctx: 16384, delay_scale: 4.0, k: 8, policy: gated_k}
+  - {name: c16k_d4_gatedk_k12, ctx: 16384, delay_scale: 4.0, k: 12, policy: gated_k}
+  - {name: c16k_d4_gatedk_k16, ctx: 16384, delay_scale: 4.0, k: 16, policy: gated_k}
+  - {name: c16k_d4_admret_w0.5, ctx: 16384, delay_scale: 4.0, k: 16, policy: adm_retain, kvm: {omega: 0.5}}
+  - {name: c16k_d4_admret_w1, ctx: 16384, delay_scale: 4.0, k: 16, policy: adm_retain, kvm: {omega: 1.0}}
+  - {name: c16k_d4_admret_w2, ctx: 16384, delay_scale: 4.0, k: 16, policy: adm_retain, kvm: {omega: 2.0}}
+  - {name: c16k_d4_managedk_k8, ctx: 16384, delay_scale: 4.0, k: 8, policy: managed_k}
+  - {name: c16k_d4_managedk_k12, ctx: 16384, delay_scale: 4.0, k: 12, policy: managed_k}
+  - {name: c8k_d1_gatedk_k2, ctx: 8192, delay_scale: 1.0, k: 2, policy: gated_k}
+  - {name: c8k_d1_gatedk_k3, ctx: 8192, delay_scale: 1.0, k: 3, policy: gated_k}
+  - {name: c8k_d1_gatedk_k4, ctx: 8192, delay_scale: 1.0, k: 4, policy: gated_k}
+  - {name: c8k_d1_admret_w0.5, ctx: 8192, delay_scale: 1.0, k: 8, policy: adm_retain, kvm: {omega: 0.5}}
+  - {name: c8k_d1_admret_w1, ctx: 8192, delay_scale: 1.0, k: 8, policy: adm_retain, kvm: {omega: 1.0}}
+  - {name: c8k_d1_admret_w2, ctx: 8192, delay_scale: 1.0, k: 8, policy: adm_retain, kvm: {omega: 2.0}}
+  - {name: c8k_d1_managedk_k2, ctx: 8192, delay_scale: 1.0, k: 2, policy: managed_k}
+  - {name: c8k_d1_managedk_k3, ctx: 8192, delay_scale: 1.0, k: 3, policy: managed_k}

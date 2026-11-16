@@ -1,0 +1,26 @@
+# omega tuning for ours (docs/phase2_spec.md §2.3, §8.2, 11/18-19): omega in {0.5, 1, 2} at the six
+# main points, on the perf split (p1_long_200), for the shipped version only. k = K_max: 8 at x1
+# (E1); 16 at x4 is a placeholder for the P0b 131k result. The winner per point replaces the
+# omega placeholders of p1_dev / p2 / p3 / p4 / p5 / p1_test. Never reported as a result.
+# If drop-only ships (11/18), change `policy: ours` to `policy: ours_h0` throughout.
+name: tune_omega
+defaults: {workload: workloads/p1_long_200.json, parallel: 64, reps: 1, policy: ours}
+points:
+  - {name: c8k_d1_w0.5, ctx: 8192, delay_scale: 1.0, k: 8, kvm: {omega: 0.5}}
+  - {name: c8k_d1_w1, ctx: 8192, delay_scale: 1.0, k: 8, kvm: {omega: 1.0}}
+  - {name: c8k_d1_w2, ctx: 8192, delay_scale: 1.0, k: 8, kvm: {omega: 2.0}}
+  - {name: c16k_d1_w0.5, ctx: 16384, delay_scale: 1.0, k: 8, kvm: {omega: 0.5}}
+  - {name: c16k_d1_w1, ctx: 16384, delay_scale: 1.0, k: 8, kvm: {omega: 1.0}}
+  - {name: c16k_d1_w2, ctx: 16384, delay_scale: 1.0, k: 8, kvm: {omega: 2.0}}
+  - {name: c32k_d1_w0.5, ctx: 32768, delay_scale: 1.0, k: 8, kvm: {omega: 0.5}}
+  - {name: c32k_d1_w1, ctx: 32768, delay_scale: 1.0, k: 8, kvm: {omega: 1.0}}
+  - {name: c32k_d1_w2, ctx: 32768, delay_scale: 1.0, k: 8, kvm: {omega: 2.0}}
+  - {name: c8k_d4_w0.5, ctx: 8192, delay_scale: 4.0, k: 16, kvm: {omega: 0.5}}
+  - {name: c8k_d4_w1, ctx: 8192, delay_scale: 4.0, k: 16, kvm: {omega: 1.0}}
+  - {name: c8k_d4_w2, ctx: 8192, delay_scale: 4.0, k: 16, kvm: {omega: 2.0}}
+  - {name: c16k_d4_w0.5, ctx: 16384, delay_scale: 4.0, k: 16, kvm: {omega: 0.5}}
+  - {name: c16k_d4_w1, ctx: 16384, delay_scale: 4.0, k: 16, kvm: {omega: 1.0}}
+  - {name: c16k_d4_w2, ctx: 16384, delay_scale: 4.0, k: 16, kvm: {omega: 2.0}}
+  - {name: c32k_d4_w0.5, ctx: 32768, delay_scale: 4.0, k: 16, kvm: {omega: 0.5}}
+  - {name: c32k_d4_w1, ctx: 32768, delay_scale: 4.0, k: 16, kvm: {omega: 1.0}}
+  - {name: c32k_d4_w2, ctx: 32768, delay_scale: 4.0, k: 16, kvm: {omega: 2.0}}

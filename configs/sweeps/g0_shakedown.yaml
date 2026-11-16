@@ -1,0 +1,16 @@
+# G0 shakedown after the code freeze (docs/phase2_spec.md §8.2, 11/18): one validation run per
+# budget with ours, LLAMA_KV_CACHE_DEBUG=1 and -lv 4, so find_slot logs used cells and
+# used_max_p1 per ubatch (kv:895-903). Pass criteria: tok_check 0 mismatches, reconcile clean,
+# used <= U (analysis.kv_timeline kvdbg: used_gt_cap 0, used_gt_U_approx ~0), 0 kv_violation,
+# server_log purges 0 and overflows 0. Not timed (debug logging is slow); not reported.
+# Also the check of the admission priors on dev traces:
+#   uv run python -m scripts.fit_kvm_priors --check 'results/g0_shakedown/*/rep*'
+# k = K_max (8 at x1 from E1; 16 at x4 is a placeholder for the P0b 131k result); omega 1.0 is a
+# placeholder until tune_omega (G0 runs before tuning, so it checks safety, not speed).
+name: g0_shakedown
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 1, policy: ours, kvm: {omega: 1.0},
+           env: {LLAMA_KV_CACHE_DEBUG: "1"}, extra: "-lv 4"}
+points:
+  - {name: c8k_d1_kvdbg, ctx: 8192, delay_scale: 1.0, k: 8}
+  - {name: c16k_d4_kvdbg, ctx: 16384, delay_scale: 4.0, k: 16}
+  - {name: c32k_d4_kvdbg, ctx: 32768, delay_scale: 4.0, k: 16}

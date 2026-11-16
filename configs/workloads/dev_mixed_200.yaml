@@ -1,0 +1,8 @@
+# Phase 2 P3: every dev question with the Phase 1 default mix (same profile shares as
+# p1_mixed_200), all at t=0. Knobs stay frozen from the long-mix tuning.
+name: dev_mixed_200
+split: dev
+n_tasks: 200
+seed: 0
+mix: {react_short: 0.4, react_long: 0.3, react_explain: 0.2, oneshot_long: 0.1}
+arrival: {type: batch}
