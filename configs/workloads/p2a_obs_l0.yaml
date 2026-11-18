@@ -1,0 +1,8 @@
+# Phase 2 idea A, stage 1: observation-size level L0 on 200 dev questions, one profile only.
+# All four levels use the same questions (same seed and n_tasks), so F1 can be paired per question.
+name: p2a_obs_l0
+split: dev
+n_tasks: 200
+seed: 0
+mix: {react_long: 1.0}
+arrival: {type: batch}

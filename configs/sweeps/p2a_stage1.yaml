@@ -1,0 +1,10 @@
+# Phase 2 idea A, stage 1 (quality only): how much KV each observation-size level costs and how much
+# F1 it loses. Ample pool (131k, no memory pressure), K = 8 (Phase 1 best), Phase 1 runner (fixed_k).
+# Same 200 dev questions at every level; 2 repeats each to see run-to-run noise.
+name: p2a_stage1
+defaults: {ctx: 131072, parallel: 64, k: 8, reps: 2, delay_scale: 1.0, policy: fixed_k}
+points:
+  - {name: l0, workload: workloads/p2a_obs_l0.json}
+  - {name: l1, workload: workloads/p2a_obs_l1.json}
+  - {name: l2, workload: workloads/p2a_obs_l2.json}
+  - {name: l3, workload: workloads/p2a_obs_l3.json}

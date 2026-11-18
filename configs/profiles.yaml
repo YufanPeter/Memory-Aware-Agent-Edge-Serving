@@ -18,6 +18,17 @@ profiles:
   react_long:
     search_sentences: 0
     neighbors: 9
+  # Phase 2 idea A, stage 1: react_long with smaller observations (docs/phase2_ideas.md).
+  # L0 = react_long (whole paragraph + 9 neighbours). Same agent, only the search output shrinks.
+  react_long_l1:            # whole paragraph + 4 neighbours
+    search_sentences: 0
+    neighbors: 4
+  react_long_l2:            # whole paragraph, no neighbours
+    search_sentences: 0
+    neighbors: 0
+  react_long_l3:            # first 3 sentences, no neighbours (= react_short's search)
+    search_sentences: 3
+    neighbors: 0
   # Multi-step, short context, long output: after finish, a fixed-length Explanation
   # (decoded with ignore_eos, so every task generates exactly explain_tokens more tokens).
   react_explain:

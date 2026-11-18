@@ -11,36 +11,47 @@ Liu, Kaiqi Han, Tianyu Xu, You Chen, Yufan Shi.
 
 - **Phase 1 (submitted 11/4, done):** reproducible agent workload, FIFO fixed-concurrency
   baseline, measurements E1–E5 of what limits throughput.
-- **Phase 2 (current, final submission ~12/9):** agent-level KV lifecycle manager at tool-call
-  boundaries (retain / offload via slot save-restore / drop and re-prefill) plus admission that
-  reserves each agent's projected peak KV.
-- **Phase 3 (optional):** selective KV, i.e. trimming non-useful observation text, with HotpotQA
-  supporting facts as the oracle.
+- **Phase 2 (current, final submission ~12/9), plan in `docs/phase2_ideas.md`, in this order:**
+  1. *Base*: KV-budget admission + pre-request gate (never overflow the pool) + one shared copy of
+     the system prompt (fork patch). Infrastructure, not the contribution.
+  2. *Selective KV* (main contribution): keep only the useful segments of an agent's KV and delete
+     the rest in place (llama-server patch: `seq_rm` + `seq_add`, like context shift), no
+     re-prefill, triggered by memory pressure. Text compaction + re-prefill is the baseline.
+  3. *Idea B*: grouped KV pool between `--kv-unified` and per-slot KV (llama.cpp patch), agents
+     bin-packed by projected peak, migrated with save/restore.
 - The instructor said scheduling alone earns only a regular grade; the KV work is the
-  contribution. Every cache action must use controls llama.cpp actually exposes.
+  contribution. Every cache action must use controls llama.cpp exposes; our own llama-server
+  patches are allowed (user, 2026-11-16) and must be stated openly in the report.
 
 Evaluation: goodput (correct tasks/min) and p95/p99 latency at a fixed KV budget are the main
-metrics. Completed count, failures, EM/F1 and output length are constraints that every
-performance table reports. KV occupancy, idle-KV share, recomputed tokens and prefix-cache
-hits explain the results.
+metrics, with request-level TTFT and TPOT p50/p95 to explain latency. Completed count, failures,
+EM/F1 and output length are constraints that every performance table reports (quality is a
+guardrail, not the objective; ±0.03 F1 counts as unchanged). KV occupancy, idle-KV share,
+recomputed tokens and prefix-cache hits explain the results.
 
 ### Documents (read these before planning work)
 
 | File | What |
 |---|---|
-| `docs/kv_lifecycle_plan.md` | **Phase 2 plan, the source of truth for current work**: architecture, invariants, hook points, components, policy, configs, experiments P1–P7, timeline |
+| `docs/phase2_ideas.md` | **Phase 2 plan, the source of truth for current work** (Chinese): goal and metric table, the three directions, ideas explored and dropped, stage-1 results |
+| `docs/phase2_notes.md` | llama.cpp b11960 internals Phase 2 relies on (attention span, placement, `seq_cp`, observability) and the X1 / X3 / base smoke measurements |
+| `docs/kv_lifecycle_plan.md` | Original Phase 2 plan (retain / offload / drop lifecycle); superseded by `phase2_ideas.md`, still useful for hook points |
+| `tools/observability/README.md` | Prometheus + Grafana dashboards for runs (live and replay) |
 | `docs/phase1/report.tex` (`docs/phase1_report.pdf`) | Submitted Phase 1 report |
 | `docs/phase1_details.md` | Phase 1 full results, limitations, reproduction commands (Appendix A) |
 | `docs/project_design.md` | Original design (Chinese) |
 | `docs/cost_model_and_microbench_plan.md`, `costmodel/` | Cost model, calibrated with Phase 1 measurements |
 
-## Current status (2026-11-15)
+## Current status (2026-11-18)
 
-- Phase 1 is done and merged to `main` (PR #1 from `jiawei`); `yufan` = `main` at `64091ce`.
-- **Phase 2 code has not started**: there is no `edgeserve/kvm.py` or `edgeserve/policies.py`
-  yet. The plan expected all baselines running end to end by 11/11, so we are about a week
-  behind. Check with the user which parts teammates already own before starting a component.
-- Development moves to the AWS instance (see AWS below); the Mac is for MockLLM work.
+- Phase 1 is done and merged to `main` (PR #1 from `jiawei`). The user works on Phase 2 alone.
+- **Base implemented** (`edgeserve/kvm.py`, `policies.py`, fork patch): 0 overflows in 16k-pool smoke
+  runs; formal scenarios, tuning and repeats still to do.
+- **Stage 1 done** (`docs/phase2_ideas.md` §3): trimming `react_long` observations to the paragraph
+  halves peak KV and doubles goodput at equal F1, so observation text is the main KV waste; this
+  motivates selective KV. Idea A (pressure-adaptive trimming) was dropped.
+- **Next: selective KV step 1 (feasibility)**: the trim patch and client token alignment.
+- Development is on the AWS instance (see AWS below); the Mac is for MockLLM work.
 
 ## Phase 1 findings (A10G, 7B, 5,890 tasks)
 
@@ -75,20 +86,17 @@ hits explain the results.
 - **CUDA outputs are not deterministic with concurrent slots** (temperature 0, fixed seed).
   Compare quality with paired workloads, repeats or large n, never from one small run.
 
-## Phase 2 next steps (details in `docs/kv_lifecycle_plan.md`)
+## Phase 2 next steps (details in `docs/phase2_ideas.md`)
 
-1. `llm.py`: `slot_save/restore/erase`, `slots()`, server `timings`, on a separate httpx client
-   without keep-alive. `MockLLM`: pool capacity, overflow as measured, slot ops, optional
-   "slot op blocks all decode" mode.
-2. `edgeserve/kvm.py` (accounting, admission, timers, events `kv_state`, `slot_op`, `kv_wait`,
-   `admit_wait`) wired into the hook points in plan §3.3; `edgeserve/policies.py` with the six
-   configs of §4.3 (FIFO + best K, llama.cpp default, fixed-TTL offload, always offload, ours =
-   pressure-gated TTL + peak-KV admission + prefetch, clairvoyant-delay TTL). Unit tests on
-   the Mac against MockLLM.
-3. E0b on AWS (slot ops on busy slots, restore into another slot / a fragmented pool).
-4. §4.4 branch decision, tuning on dev, then P1 (main comparison), P2 (2×2 decomposition and
-   ablations), P3–P7.
-5. Final report and reproducibility package by 12/9.
+Work one step at a time: define the scenarios (workload mix, pool sizes, question set, baselines)
+before running experiments, report, and wait for the user's go-ahead before the next step.
+
+1. Selective KV: (1) feasibility: llama-server "trim range" patch + client token alignment, check
+   cache reuse and outputs after a trim; (2) quality runs: scorer × keep ratio vs F1 and KV saved,
+   against text compaction + re-prefill; (3) serving runs on tight pools: base vs base + selective KV.
+2. Base: formal scenarios, tune fixed K and rho on dev, repeats (can be folded into step 1.3).
+3. Idea B: ~1 day feasibility check of the grouped-stream patch, then decide.
+4. Final report and reproducibility package by 12/9.
 
 ## Decisions already made (do not reopen without the user)
 
@@ -118,14 +126,22 @@ hits explain the results.
   `configs/profiles.yaml` · `delays.py` (seeded tool latency) · `workload.py` · `llm.py`
   (streaming client, MockLLM) · `runner.py` (FIFO, K workers, events/tasks/meta/summary,
   steady-state throughput and goodput) · `eval.py` (official EM/F1).
-- Profiles: `react_short`, `react_long`, `react_explain`, `oneshot_long`; `closedbook` is a
+- Profiles: `react_short`, `react_long` (+ `react_long_l1..l3`, stage-1 observation levels), `react_explain`, `oneshot_long`; `closedbook` is a
   quality baseline only. Splits: dev 200 (tuning), test 500 (final), perf 1,500 (large sweeps).
 - `scripts/`: run as modules from the repo root (`uv run python -m scripts.build_corpus`);
   `scripts/start_server.sh` (env: MODEL, CTX, PARALLEL, PORT, SLOT_PATH, LLAMA_SERVER, THREADS,
   CMD_OUT, EXTRA); `scripts/sweep.py` (YAML grid in `configs/sweeps/` → server restart → runner,
   resumable).
-- `bench/` (E0 runtime probes, microbenchmarks, slot offload bench), `analysis/` (aggregate,
-  composition, kv_timeline, phase1_figures), `costmodel/`, `tools/mem_aws.sh`.
+- Phase 2: `kvm.py` (KV manager: accounting, admission, gate, give-up/restore, fork, `kv_state`
+  events) · `policies.py` (configs: baselines `fixed_k`/`per_slot`/`llamacpp`/`always_offload`,
+  `base`, `base_fork`, `base_compact`, decomposition cells) · `compact.py` (text compaction with
+  oracle/bm25/entity/recency scorers). `llm.py` has slot save/restore/erase/fork and a MockLLM
+  with a finite pool, overflow and slot ops.
+- `tools/llama_patch/` (fork patch + build script; patched binaries in `~/llama.cpp/build/bin`,
+  unpatched in `build/bin-orig`) · `tools/observability/` (exporter + Prometheus + Grafana).
+- `bench/` (E0 runtime probes, microbenchmarks, slot offload bench, `x1_speed_tax.py`,
+  `x3_fork_check.py`), `analysis/` (aggregate, composition, kv_timeline, phase1_figures,
+  `check_kvm.py`, `obs_levels.py`), `costmodel/`, `tools/mem_aws.sh`.
 - Tests: `uv run pytest` (mock LLM, no model). Mock end-to-end:
   `uv run python -m edgeserve.runner --workload workloads/smoke.json --k 2 --mock --out results/mock`.
 - `data/`, `models/`, `results/`, `.env`, `*.pem` are gitignored and rebuilt per machine.
