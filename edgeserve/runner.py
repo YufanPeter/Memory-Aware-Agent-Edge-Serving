@@ -137,6 +137,13 @@ def summarize(rows: list[dict[str, Any]], makespan: float) -> dict[str, Any]:
     trim = by_arrival[len(rows) // 10: len(rows) - len(rows) // 10] or by_arrival
     prompt_n = sum(_req_sum(r, "prompt_n") for r in rows)
     cache_n = sum(_req_sum(r, "cache_n") for r in rows)
+    # Request-level latency: TTFT (client-measured: queueing in the server + prefill) and TPOT
+    # (server decode time per generated token; the unified-pool attention span shows up here).
+    reqs = [s["llm"] for r in rows for s in r["trace"]["steps"] if s["llm"].get("ok")]
+    ttft = [q["ttft_s"] for q in reqs if q.get("ttft_s") is not None]
+    tpot = [q["predicted_ms"] / q["predicted_n"] for q in reqs
+            if q.get("predicted_ms") is not None and (q.get("predicted_n") or 0) > 0]
+    r3 = lambda x: round(x, 4) if x is not None else None  # noqa: E731
     return {
         "n_tasks": len(rows), "statuses": statuses, "completed": len(answered),
         "failed": len(rows) - len(answered),
@@ -150,6 +157,11 @@ def summarize(rows: list[dict[str, Any]], makespan: float) -> dict[str, Any]:
         "latency_trim_p95_s": _quantile([r["latency_s"] for r in trim], 0.95),
         "queue_wait_mean_s": mean("queue_wait_s"),
         "queue_wait_p95_s": _quantile([r["queue_wait_s"] for r in rows], 0.95),
+        "n_requests": len(reqs),
+        "ttft_p50_s": r3(_quantile(ttft, 0.5)), "ttft_p95_s": r3(_quantile(ttft, 0.95)),
+        "ttft_p99_s": r3(_quantile(ttft, 0.99)),
+        "tpot_p50_ms": r3(_quantile(tpot, 0.5)), "tpot_p95_ms": r3(_quantile(tpot, 0.95)),
+        "tpot_p99_ms": r3(_quantile(tpot, 0.99)),
         "em": mean("em"), "f1": mean("f1"), "sf_recall": mean("sf_recall"), "steps_mean": mean("n_llm_calls"),
         "decode_tokens_mean": round(statistics.mean(_req_sum(r, "predicted_n") for r in rows), 1) if rows else None,
         "prefill_tokens_total": prompt_n, "cached_tokens_total": cache_n,

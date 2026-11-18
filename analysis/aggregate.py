@@ -52,8 +52,14 @@ def run_row(run: Path) -> dict[str, Any]:
     # mostly queueing; service time is what one agent experiences once it runs.
     service = sorted(t["service_s"] for t in tasks)
     q = lambda xs, p: round(xs[int(p * (len(xs) - 1))], 4) if xs else None  # noqa: E731
-    row.update({"ttft_p50_s": q(ttft, 0.5), "ttft_p95_s": q(ttft, 0.95),
-                "service_p50_s": q(service, 0.5), "service_p95_s": q(service, 0.95)})
+    # TPOT: server decode time per generated token (computed here so older runs get it too).
+    tpot = sorted(s["llm"]["predicted_ms"] / s["llm"]["predicted_n"] for t in tasks for s in t["trace"]["steps"]
+                  if s["llm"].get("ok") and s["llm"].get("predicted_ms") is not None
+                  and (s["llm"].get("predicted_n") or 0) > 0)
+    row.update({"ttft_p50_s": q(ttft, 0.5), "ttft_p95_s": q(ttft, 0.95), "ttft_p99_s": q(ttft, 0.99),
+                "tpot_p50_ms": q(tpot, 0.5), "tpot_p95_ms": q(tpot, 0.95), "tpot_p99_ms": q(tpot, 0.99),
+                "service_p50_s": q(service, 0.5), "service_p95_s": q(service, 0.95),
+                "service_p99_s": q(service, 0.99), "latency_p99_s": summary.get("latency_p99_s")})
     row.update({f"kv_{m}": kv.get(m) for m in KV})
     for s, v in (kv.get("share") or {}).items():
         row[f"kv_share_{s}"] = v
