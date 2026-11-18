@@ -1,0 +1,10 @@
+# Selective KV smoke test on the real server: does trimming work inside the agent loop (slot holds
+# the generated Thought/Action too), and does the request after a trim reuse the slot? Ample pool,
+# K = 8, oracle selection (non-supporting sentences of observations older than the latest).
+name: p2s_smoke
+defaults: {ctx: 131072, parallel: 64, k: 8, workload: workloads/p2s_long_dev30.json,
+           llama_server: ~/llama.cpp/build/bin/llama-server}
+points:
+  - {name: none}
+  - {name: kv_oracle, selective: kv, sel_scorer: oracle}
+  - {name: text_oracle, selective: text, sel_scorer: oracle}

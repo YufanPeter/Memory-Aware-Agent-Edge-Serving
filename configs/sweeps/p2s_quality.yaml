@@ -1,0 +1,21 @@
+# Selective KV, step 2 (quality): which sentences can go, and when, without losing F1, and how much KV
+# that saves. react_long on the 200 dev questions of stage 1 (paired with p2a_stage1/l0), ample pool
+# (131k, no memory pressure: this isolates quality and recompute), K = 8, 2 repeats.
+#   kv_*    delete from the slot's KV in place (patched server's trim)
+#   text_*  remove the same sentences from the text only; the server re-prefills from the first change
+#   *_k0    keep_last = 0: an observation is trimmed as soon as the agent has used it once
+# Scorers: oracle = supporting-fact labels (upper bound only), bm25 / entity keep 30% of sentences,
+# recency (keep 0) drops older observations entirely.
+name: p2s_quality
+defaults: {ctx: 131072, parallel: 64, k: 8, reps: 2, workload: workloads/p2a_obs_l0.json,
+           llama_server: ~/llama.cpp/build/bin/llama-server, sel_keep_last: 1}
+points:
+  - {name: none}
+  - {name: kv_oracle, selective: kv, sel_scorer: oracle}
+  - {name: kv_bm25, selective: kv, sel_scorer: bm25, sel_keep: 0.3}
+  - {name: kv_entity, selective: kv, sel_scorer: entity, sel_keep: 0.3}
+  - {name: kv_recency, selective: kv, sel_scorer: recency, sel_keep: 0.0}
+  - {name: kv_oracle_k0, selective: kv, sel_scorer: oracle, sel_keep_last: 0}
+  - {name: kv_bm25_k0, selective: kv, sel_scorer: bm25, sel_keep: 0.3, sel_keep_last: 0}
+  - {name: text_oracle, selective: text, sel_scorer: oracle}
+  - {name: text_bm25, selective: text, sel_scorer: bm25, sel_keep: 0.3}
