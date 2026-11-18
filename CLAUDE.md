@@ -35,12 +35,10 @@ recomputed tokens and prefix-cache hits explain the results.
 |---|---|
 | `docs/phase2_ideas.md` | **Phase 2 plan, the source of truth for current work** (Chinese): goal and metric table, the three directions, ideas explored and dropped, stage-1 results |
 | `docs/phase2_notes.md` | llama.cpp b11960 internals Phase 2 relies on (attention span, placement, `seq_cp`, observability) and the X1 / X3 / base smoke measurements |
-| `docs/kv_lifecycle_plan.md` | Original Phase 2 plan (retain / offload / drop lifecycle); superseded by `phase2_ideas.md`, still useful for hook points |
 | `tools/observability/README.md` | Prometheus + Grafana dashboards for runs (live and replay) |
 | `docs/phase1/report.tex` (`docs/phase1_report.pdf`) | Submitted Phase 1 report |
 | `docs/phase1_details.md` | Phase 1 full results, limitations, reproduction commands (Appendix A) |
-| `docs/project_design.md` | Original design (Chinese) |
-| `docs/cost_model_and_microbench_plan.md`, `costmodel/` | Cost model, calibrated with Phase 1 measurements |
+| `costmodel/README.md` | Cost model and microbenchmarks, frozen predictions vs Phase 1 calibration |
 
 ## Current status (2026-11-18)
 

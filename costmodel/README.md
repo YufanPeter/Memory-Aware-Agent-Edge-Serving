@@ -1,9 +1,13 @@
-# Cost model and microbenchmark plan
+# Cost model and microbenchmarks (Phase 1)
 
 Goal: predict, before measuring, when KV memory (not compute) limits agent-serving
 throughput, then calibrate those predictions with microbenchmarks on each machine.
+The calibrated numbers are in `docs/phase1_details.md` §4; Phase 2 constants in
+`edgeserve/kvm.py` come from there.
 
 - `costmodel/cost_model.py`: first-principles predictions. `--save` freezes them to `predictions/`.
+- `costmodel/calibrated.py`: refits the same quantities from `results/microbench/`
+  (`uv run python -m costmodel.calibrated`), writes `predictions/calibrated_a10g.json`.
 - `bench/run_microbench.sh`: prefill vs length, decode vs depth, batched decode vs batch.
 - `bench/slot_offload_bench.py`: real cost of llama-server slot save/restore vs re-prefill.
 
@@ -56,14 +60,10 @@ modelled (client overhead, longer outputs) or the measurement counts differently
 
 Rule: local runs validate behaviour, AWS runs produce numbers.
 
-## Porting checklist
+## Re-running the calibration on a new machine
 
-1. Build llama.cpp b11960 with CUDA on the instance; record `--version` in `meta.json`.
-2. Run `run_microbench.sh a10g` with `NPL=1,2,4,8,16,32,64,128`.
+1. Build llama.cpp b11960 with CUDA; record `--version`.
+2. Run `bench/run_microbench.sh <tag>` with `NPL=1,2,4,8,16,32,64,128`.
 3. Start llama-server with `--slot-save-path /dev/shm/slots` and run
-   `slot_offload_bench.py --tag a10g-shm`; repeat on the instance-store NVMe.
-4. Replace `bw_eff`, `flops_eff`, overhead and `host_link_bw` in `cost_model.py`
-   with fitted values. Keep the original frozen predictions and report both.
-5. g5.xlarge has 16 GiB host RAM shared by the server, runner, BM25 index and
-   `/dev/shm`: size the offload tier against that.
-6. Stop the instance between sessions.
+   `bench/slot_offload_bench.py --tag <tag>-shm`.
+4. `uv run python -m costmodel.calibrated`; keep the frozen predictions above and report both.
