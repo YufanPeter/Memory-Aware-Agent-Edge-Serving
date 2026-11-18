@@ -10,7 +10,7 @@ task's whole conversation stays in one slot's KV cache while it waits for tools.
     uv run python -m edgeserve.runner --workload workloads/smoke.json --k 2 --mock   # no server needed
     uv run python -m edgeserve.runner --workload workloads/smoke.json --policy base --pool-tokens 16384 --out ...
 
-With a policy that admits by projected KV (base, base_fork, base_compact, admit_only, always_offload) the number of
+With a policy that admits by projected KV (base, base_fork, admit_only, always_offload) the number of
 workers is the server's slot count (or --slots), and admission decides how many run at once.
 
 Outputs in --out: events.jsonl, tasks.jsonl, meta.json, summary.json.
@@ -39,6 +39,7 @@ from edgeserve.data import load_split
 from edgeserve.eval import exact_match, f1_score, sf_recall
 from edgeserve.events import EventLog
 from edgeserve.kvm import N_GOLDEN, KVManager
+from edgeserve.kvtrim import SelectiveKV
 from edgeserve.llm import LlamaServerClient, MockLLM
 from edgeserve.policies import get_policy
 from edgeserve.profiles import PROFILES_PATH, load_profiles
@@ -113,6 +114,19 @@ def _req_sum(row: dict[str, Any], key: str) -> int:
     return sum(int(s["llm"].get(key) or 0) for s in row["trace"]["steps"])
 
 
+def _trim_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Selective KV totals (absent when no step trimmed anything)."""
+    trims = [s["trim"] for r in rows for s in r["trace"]["steps"] if s.get("trim")]
+    if not trims:
+        return {}
+    return {"trims": len(trims), "trim_failures": sum(not t["ok"] for t in trims),
+            "trim_tokens_total": sum(t["tokens"] for t in trims), "trim_chars_total": sum(t["chars"] for t in trims),
+            "trim_sentences": sum(t["sentences"] for t in trims),
+            "trim_sf_sentences": sum(t["sf_sentences"] for t in trims),
+            "trim_spans_skipped": sum(t["skipped"] + t["retok_dropped"] for t in trims),
+            "trim_server_ms_mean": round(statistics.mean(t["server_ms"] for t in trims), 3)}
+
+
 def summarize(rows: list[dict[str, Any]], makespan: float) -> dict[str, Any]:
     lat = [r["latency_s"] for r in rows]
     statuses: dict[str, int] = {}
@@ -166,6 +180,7 @@ def summarize(rows: list[dict[str, Any]], makespan: float) -> dict[str, Any]:
         "decode_tokens_mean": round(statistics.mean(_req_sum(r, "predicted_n") for r in rows), 1) if rows else None,
         "prefill_tokens_total": prompt_n, "cached_tokens_total": cache_n,
         "cache_hit_rate": round(cache_n / (prompt_n + cache_n), 4) if prompt_n + cache_n else None,
+        **_trim_summary(rows),
     }
 
 
@@ -178,8 +193,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     items = {it.id: it for it in load_split(wl["meta"].get("split", "dev"))}
     corpus = Corpus.load(with_bm25=True)   # search suggestions and react_long neighbors
 
-    policy = get_policy(args.policy, overcommit=args.overcommit, pressure=args.pressure,
-                        compact_scorer=args.compact_scorer, compact_keep=args.compact_keep)
+    policy = get_policy(args.policy, overcommit=args.overcommit, pressure=args.pressure)
     pin = args.pin and policy.pin
     llm: Any
     if args.mock:
@@ -204,7 +218,11 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         if not args.pool_tokens:
             raise SystemExit(f"--policy {policy.name} needs --pool-tokens (the server's -c)")
         kvm = KVManager(llm, events, policy, args.pool_tokens, n_slots if policy.admission else n_workers)
-    agent = Agent(llm, corpus, events, seed=args.seed, delay_scale=args.delay_scale, kvm=kvm)
+    selective = None
+    if args.selective != "none":
+        selective = SelectiveKV(llm, args.selective, args.sel_scorer, args.sel_keep, args.sel_keep_last)
+    agent = Agent(llm, corpus, events, seed=args.seed, delay_scale=args.delay_scale, kvm=kvm,
+                  selective=selective)
     queue: asyncio.Queue = asyncio.Queue()
     rows: list[dict[str, Any]] = []
     tasks_f = open(out / "tasks.jsonl", "w", buffering=1, encoding="utf-8", newline="\n")
@@ -270,6 +288,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         "workload": args.workload, "workload_sha": hashlib.sha256(wl_text.encode()).hexdigest()[:16],
         "workload_meta": wl["meta"], "k": args.k, "workers": n_workers, "pin_slots": pin,
         "cache_prompt": not args.no_cache, "policy": policy.__dict__, "pool_tokens": args.pool_tokens,
+        "selective": None if selective is None else {"mechanism": args.selective, "scorer": args.sel_scorer,
+                                                     "keep": args.sel_keep, "keep_last": args.sel_keep_last},
         "delay_scale": args.delay_scale, "seed": args.seed, "mock": args.mock,
         "profiles": {n: p.__dict__ for n, p in profiles.items()},
         "server_props": {k: props.get(k) for k in ("build_info", "model_path", "total_slots",
@@ -309,8 +329,12 @@ def main() -> None:
     ap.add_argument("--slots", type=int, help="workers under an admission policy (default: server slots)")
     ap.add_argument("--overcommit", type=float, help="override the policy's rho")
     ap.add_argument("--pressure", type=float, help="override the policy's pressure threshold")
-    ap.add_argument("--compact-scorer", choices=["bm25", "entity", "recency", "oracle"])
-    ap.add_argument("--compact-keep", type=float, help="share of older observation sentences kept")
+    ap.add_argument("--selective", choices=["none", "kv", "text"], default="none",
+                    help="selective KV during tool calls: delete chosen sentences of older observations "
+                         "from the slot's KV in place (kv, patched server) or from the text only (text)")
+    ap.add_argument("--sel-scorer", choices=["oracle", "bm25", "entity", "recency"], default="oracle")
+    ap.add_argument("--sel-keep", type=float, default=0.3, help="share of sentences (recency: observations) kept")
+    ap.add_argument("--sel-keep-last", type=int, default=1, help="newest observations left untouched")
     ap.add_argument("--mock-tax", type=float, help="MockLLM only: extra decode seconds per generated token for "
                     "every resident KV token (models the unified-pool attention span measured in X1)")
     args = ap.parse_args()

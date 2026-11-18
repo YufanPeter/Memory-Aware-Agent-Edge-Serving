@@ -1,15 +1,10 @@
-"""Context compaction ("slim instead of evict", direction 2 of the Phase 2 plan).
+"""Which sentences of an agent's older observations it no longer needs (selective KV).
 
-When an agent's KV has to go, it can come back smaller: before the next request, the
-sentences of its *older* observations that a scorer deems unhelpful are removed and each
-removed run is replaced by " [...]". Everything else stays byte-identical: the shared prefix,
-the question, every Thought/Action the model wrote, the framing, and the latest observation
-(the model has not read it yet). The prompt then diverges from the slot's cached KV at the first
-removed sentence, so llama-server re-prefills only from there (or from scratch after a drop),
-and the context stays smaller for the rest of the task.
-
-An observation is compacted at most once (its " [...]" marker shows it was), so repeated
-compaction does not keep eating the same text.
+`select_drop` picks the observation sentences to delete; edgeserve/kvtrim.SelectiveKV then deletes
+them from the slot's KV in place (mechanism "kv") or from the text only, re-prefilling (mechanism
+"text", the baseline). Never touched: the shared prefix, the question, every Thought/Action the model
+wrote, the framing, and the newest `keep_last` observations. Each observation is processed once
+(a zero-length marker segment records it).
 
 Scorers (higher = keep):
   oracle   HotpotQA supporting-fact labels (obs_sf). An upper bound, not a deployable method.
@@ -22,24 +17,14 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
-from dataclasses import dataclass
 
 from edgeserve.prompt import Prompt
 
-ELIDED = " [...]"
 _WORD = re.compile(r"[a-z0-9]+")
 _ENTITY = re.compile(r"\b[A-Z][a-zA-Z0-9'-]+")
 _STOP = frozenset("the a an of in on at to and or is was were be by for with as from that this which who "
                   "what when where it its his her their he she they i we you are has have had not".split())
 SENTENCE_KINDS = ("obs_sf", "obs_other")
-
-
-@dataclass
-class CompactResult:
-    chars_removed: int = 0
-    sentences_removed: int = 0
-    sf_removed: int = 0           # supporting-fact sentences removed (quality risk)
-    observations: int = 0         # observations compacted this time
 
 
 def _observation_spans(p: Prompt) -> list[tuple[int, int]]:
@@ -78,16 +63,21 @@ def _bm25(query: list[str], docs: list[list[str]], k1: float = 1.2, b: float = 0
     return scores
 
 
-def compact(p: Prompt, question: str, scorer: str = "bm25", keep: float = 0.3) -> CompactResult:
-    """Compact p in place. Returns what was removed."""
-    res = CompactResult()
-    spans = _observation_spans(p)[:-1]                      # never the latest observation
-    spans = [(a, b) for a, b in spans if not any(k == "obs_elided" for k, _ in p.segments[a:b])]
+def select_drop(p: Prompt, question: str, scorer: str = "bm25", keep: float = 0.3, keep_last: int = 1,
+                marker: str = "obs_trimmed") -> tuple[set[int], list[tuple[int, int]]]:
+    """Segment indices of the observation sentences to remove, and the observations considered.
+
+    Only observations older than the latest `keep_last` ones and not yet processed (no `marker`
+    segment inside) are considered; within them the scorer keeps a `keep` share of sentences
+    (recency: of observations)."""
+    spans = _observation_spans(p)
+    spans = spans[: len(spans) - keep_last] if keep_last > 0 else spans
+    spans = [(a, b) for a, b in spans if not any(k == marker for k, _ in p.segments[a:b])]
     if not spans:
-        return res
+        return set(), []
     sent_idx = [i for a, b in spans for i in range(a, b) if p.segments[i][0] in SENTENCE_KINDS]
     if not sent_idx:
-        return res
+        return set(), spans
 
     drop: set[int] = set()
     if scorer == "oracle":
@@ -108,21 +98,5 @@ def compact(p: Prompt, question: str, scorer: str = "bm25", keep: float = 0.3) -
         n_keep = max(1, math.ceil(keep * len(sent_idx)))
         ranked = sorted(range(len(sent_idx)), key=lambda j: (-scores[j], j))
         drop = {sent_idx[j] for j in ranked[n_keep:]}
-    span_ends = {b - 1 for a, b in spans}
-    new: list[tuple[str, str]] = []
-    for i, (kind, text) in enumerate(p.segments):
-        if i in drop:
-            res.chars_removed += len(text)
-            res.sentences_removed += 1
-            res.sf_removed += kind == "obs_sf"
-            if not new or new[-1] != ("obs_elided", ELIDED):
-                new.append(("obs_elided", ELIDED))
-                res.chars_removed -= len(ELIDED)
-        else:
-            new.append((kind, text))
-        if i in span_ends:
-            # zero-length marker: changes no prompt bytes, but this observation is never compacted again
-            new.append(("obs_elided", ""))
-    res.observations = len(spans)
-    p.segments[:] = new
-    return res
+    return drop, spans
+

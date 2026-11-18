@@ -76,11 +76,11 @@ def run_row(run: Path) -> dict[str, Any]:
                     "kvm_gate_wait_s": km.get("gate_wait_s"), "kvm_admit_wait_s": km.get("admit_wait_s"),
                     "kvm_slot_op_ms": km.get("slot_op_ms"), "kvm_slot_op_failures": km.get("slot_op_failures"),
                     "kvm_peak_resident": km.get("peak_resident_tokens")})
-        compacts = [json.loads(line) for line in open(run / "events.jsonl", encoding="utf-8")
-                    if '"compact"' in line]
-        compacts = [c for c in compacts if c.get("type") == "compact"]
-        row["compactions"] = sum(1 for c in compacts if c.get("sentences_removed"))
-        row["compact_sf_removed"] = sum(c.get("sf_removed", 0) for c in compacts)
+    # selective KV (runner --selective): what was deleted
+    sel = meta.get("selective") or {}
+    row["selective"] = f"{sel['mechanism']}:{sel['scorer']}:{sel['keep']}:{sel['keep_last']}" if sel else None
+    for k in ("trims", "trim_tokens_total", "trim_sf_sentences", "trim_spans_skipped"):
+        row[k] = summary.get(k)
     row["sf_recall"] = summary.get("sf_recall")
     return row
 

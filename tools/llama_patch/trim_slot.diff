@@ -1,0 +1,210 @@
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+index 2748c5b..d255bac 100644
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -3419,6 +3419,73 @@ private:
+                     res->t_ms     = (ggml_time_us() - t_start) / 1000.0;
+                     queue_results.send(std::move(res));
+                 } break;
++            case SERVER_TASK_TYPE_SLOT_TRIM:  // edgeserve patch
++                {
++                    const int id_slot = task.slot_action.id_slot;
++                    server_slot * slot = get_slot_by_id(id_slot);
++                    if (slot == nullptr) {
++                        send_error(task, "Invalid slot ID", ERROR_TYPE_INVALID_REQUEST);
++                        break;
++                    }
++                    if (ctx_dft || mctx || slot->prompt.tokens.has_mtmd) {
++                        send_error(task, "trim is not supported with a draft model or multimodal input", ERROR_TYPE_NOT_SUPPORTED);
++                        break;
++                    }
++                    if (!llama_memory_can_shift(llama_get_memory(ctx_tgt))) {
++                        send_error(task, "trim needs a KV cache that can shift positions", ERROR_TYPE_NOT_SUPPORTED);
++                        break;
++                    }
++                    if (slot->is_processing()) {
++                        SRV_DBG("trim: slot %d busy, defer task, id_task = %d\n", id_slot, task.id);
++                        queue_tasks.defer(std::move(task));
++                        break;
++                    }
++
++                    auto ranges = task.slot_action.ranges;
++                    std::sort(ranges.begin(), ranges.end());
++                    const int n = (int) slot->prompt.tokens.size();
++                    bool valid = !ranges.empty();
++                    for (size_t i = 0; valid && i < ranges.size(); ++i) {
++                        const auto & r = ranges[i];
++                        valid = r.first >= 0 && r.first < r.second && r.second <= n &&
++                                (i == 0 || r.first >= ranges[i - 1].second);
++                    }
++                    if (!valid) {
++                        send_error(task, "ranges must be non-empty, non-overlapping [p0, p1) within the slot's tokens", ERROR_TYPE_INVALID_REQUEST);
++                        break;
++                    }
++
++                    const int64_t t_start = ggml_time_us();
++
++                    // Same operations as the context shift, for arbitrary ranges: drop the cells of
++                    // [p0, p1), then move every later position down by p1 - p0 (the K-shift re-applies
++                    // RoPE on the next decode). Ranges go from the end so earlier indices stay valid.
++                    // Text-only prompts: a token's position equals its index.
++                    llama_tokens tokens = slot->prompt.tokens.get_tokens();  // copy
++                    llama_pos end = slot->prompt.tokens.pos_next();
++                    size_t n_trimmed = 0;
++                    for (auto it = ranges.rbegin(); it != ranges.rend(); ++it) {
++                        const int p0 = it->first;
++                        const int p1 = it->second;
++                        slot->mem.seq_rm (slot->id, p0, p1);
++                        slot->mem.seq_add(slot->id, p1, end, -(p1 - p0));
++                        end -= p1 - p0;
++                        tokens.erase(tokens.begin() + p0, tokens.begin() + p1);
++                        n_trimmed += p1 - p0;
++                    }
++                    slot->prompt.clear();
++                    slot->prompt.tokens.insert(tokens);
++
++                    SLT_INF(*slot, "trim: removed %zu tokens in %zu ranges, %zu left\n", n_trimmed, ranges.size(), tokens.size());
++
++                    auto res = std::make_unique<server_task_result_slot_trim>();
++                    res->id        = task.id;
++                    res->id_slot   = id_slot;
++                    res->n_trimmed = n_trimmed;
++                    res->n_tokens  = tokens.size();
++                    res->t_ms      = (ggml_time_us() - t_start) / 1000.0;
++                    queue_results.send(std::move(res));
++                } break;
+             case SERVER_TASK_TYPE_GET_LORA:
+                 {
+                     // TODO @ngxson : make lora_adapters a dedicated member of server_context
+@@ -5912,6 +5979,9 @@ void server_routes::init_routes() {
+         if (action == "fork") {  // edgeserve patch
+             return handle_slots_fork(req, id_slot);
+         }
++        if (action == "trim") {  // edgeserve patch
++            return handle_slots_trim(req, id_slot);
++        }
+ 
+         res->error(format_error_response("Invalid action", ERROR_TYPE_INVALID_REQUEST));
+         return res;
+@@ -6947,6 +7017,50 @@ std::unique_ptr<server_res_generator> server_routes::handle_slots_fork(const ser
+     return res;
+ }
+ 
++// edgeserve patch: POST /slots/{id}?action=trim  {"ranges": [[p0, p1], ...]}
++// Deletes the tokens [p0, p1) (indices into the slot's cached tokens) from the slot's KV cells and
++// cached-token list, and shifts every later token down so positions stay contiguous: the slot then
++// holds exactly the prompt without those tokens, without recomputing anything. Cells shared with
++// other slots (a forked prefix) must lie before every range, since shifting moves the cell itself.
++std::unique_ptr<server_res_generator> server_routes::handle_slots_trim(const server_http_req & req, int id_slot) {
++    auto res = create_response();
++    std::vector<std::pair<int, int>> ranges;
++    try {
++        const json request_data = json::parse(req.body);
++        for (const auto & r : request_data.at("ranges")) {
++            ranges.emplace_back(r.at(0).get<int>(), r.at(1).get<int>());
++        }
++    } catch (const std::exception &) {
++        res->error(format_error_response("trim needs {\"ranges\": [[p0, p1], ...]}", ERROR_TYPE_INVALID_REQUEST));
++        return res;
++    }
++
++    auto & rd = res->rd;
++    {
++        server_task task(SERVER_TASK_TYPE_SLOT_TRIM);
++        task.id = rd.get_new_id();
++        task.slot_action.id_slot = id_slot;
++        task.slot_action.ranges  = std::move(ranges);
++        rd.post_task(std::move(task));
++    }
++
++    auto result = rd.next(req.should_stop);
++    if (!result) {
++        // connection was closed
++        GGML_ASSERT(req.should_stop());
++        return res;
++    }
++
++    if (result->is_error()) {
++        res->error(result->to_json());
++        return res;
++    }
++
++    GGML_ASSERT(dynamic_cast<server_task_result_slot_trim*>(result.get()) != nullptr);
++    res->ok(result->to_json());
++    return res;
++}
++
+ std::unique_ptr<server_res_generator> server_routes::handle_embeddings_impl(const server_http_req & req, task_response_type res_type) {
+     auto res = create_response();
+     if (!params.embedding) {
+diff --git a/tools/server/server-context.h b/tools/server/server-context.h
+index 5fcea04..93208c6 100644
+--- a/tools/server/server-context.h
++++ b/tools/server/server-context.h
+@@ -152,6 +152,7 @@ private:
+     std::unique_ptr<server_res_generator> handle_slots_restore(const server_http_req & req, int id_slot);
+     std::unique_ptr<server_res_generator> handle_slots_erase(const server_http_req &, int id_slot);
+     std::unique_ptr<server_res_generator> handle_slots_fork(const server_http_req &, int id_slot);  // edgeserve patch
++    std::unique_ptr<server_res_generator> handle_slots_trim(const server_http_req &, int id_slot);  // edgeserve patch
+     std::unique_ptr<server_res_generator> handle_embeddings_impl(const server_http_req & req, task_response_type res_type);
+     std::unique_ptr<server_res_generator> handle_rerank_impl(const server_http_req & req);
+     std::unique_ptr<server_res_generator> handle_count_tokens(const server_http_req & req, task_response_type res_type);
+diff --git a/tools/server/server-task.cpp b/tools/server/server-task.cpp
+index 594103f..f8105e1 100644
+--- a/tools/server/server-task.cpp
++++ b/tools/server/server-task.cpp
+@@ -1710,6 +1710,18 @@ json server_task_result_slot_fork::to_json() {
+     };
+ }
+ 
++//
++// server_task_result_slot_trim (edgeserve patch)
++//
++json server_task_result_slot_trim::to_json() {
++    return json {
++        { "id_slot",   id_slot },
++        { "n_trimmed", n_trimmed },
++        { "n_tokens",  n_tokens },
++        { "timings",   { { "trim_ms", t_ms } } },
++    };
++}
++
+ //
+ // server_task_result_get_lora
+ //
+diff --git a/tools/server/server-task.h b/tools/server/server-task.h
+index c732180..29b8c6b 100644
+--- a/tools/server/server-task.h
++++ b/tools/server/server-task.h
+@@ -30,6 +30,7 @@ enum server_task_type {
+     SERVER_TASK_TYPE_SLOT_RESTORE,
+     SERVER_TASK_TYPE_SLOT_ERASE,
+     SERVER_TASK_TYPE_SLOT_FORK,  // edgeserve patch: share a prefix of another slot's KV cells
++    SERVER_TASK_TYPE_SLOT_TRIM,  // edgeserve patch: delete token ranges from a slot's KV, shift the rest
+     SERVER_TASK_TYPE_GET_LORA,
+     SERVER_TASK_TYPE_SET_LORA,
+     SERVER_TASK_TYPE_TTS,
+@@ -199,6 +200,7 @@ struct server_task {
+         std::string filepath;
+         int id_src   = -1;  // SERVER_TASK_TYPE_SLOT_FORK: source slot
+         int n_tokens = -1;  // SERVER_TASK_TYPE_SLOT_FORK: prefix length to share (-1 = all)
++        std::vector<std::pair<int, int>> ranges;  // SERVER_TASK_TYPE_SLOT_TRIM: [p0, p1) token ranges
+     };
+     slot_action slot_action;
+ 
+@@ -667,6 +669,15 @@ struct server_task_result_slot_fork : server_task_result {
+     virtual json to_json() override;
+ };
+ 
++// edgeserve patch
++struct server_task_result_slot_trim : server_task_result {
++    size_t n_trimmed;
++    size_t n_tokens;
++    double t_ms;
++
++    virtual json to_json() override;
++};
++
+ struct server_task_result_control : server_task_result {
+     bool        success = false;
+     std::string message; // optional detail when success is false

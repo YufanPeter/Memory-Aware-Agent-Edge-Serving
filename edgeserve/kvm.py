@@ -37,7 +37,7 @@ from edgeserve.policies import Policy
 
 # Projected peak context per profile: Phase 1 A10G p95 peak (docs/phase1_details.md §5.3). This is
 # the prior; once PEAK_MIN_OBS tasks of a profile have finished, the manager uses their observed p95
-# peak (x PEAK_SAFETY) instead, so the projection follows the actual model, prompt and compaction.
+# peak (x PEAK_SAFETY) instead, so the projection follows the actual model, prompt and selective KV.
 PEAK_MIN_OBS = 8
 PEAK_WINDOW = 64
 PEAK_SAFETY = 1.05
@@ -45,7 +45,7 @@ PEAK_P95 = {"react_short": 2500, "react_long": 6250, "react_explain": 3250, "one
             "closedbook": 600}
 # Token estimates for text the server has not seen yet. Qwen2.5 averages ~4 chars/token on this
 # workload; we round so that estimates err on the large side: added text counts 1 token per 3
-# chars, removed text (compaction) 1 token per 4.5 chars.
+# chars, removed text (selective KV) 1 token per 4.5 chars.
 CHARS_PER_TOKEN_ADD = 3.0
 CHARS_PER_TOKEN_DEL = 4.5
 # Phase 1 measurements on A10G / b11960 (docs/phase1_details.md §4.2); prefill and decode step
@@ -82,7 +82,6 @@ class SlotRec:
     max_ctx: int = 0             # largest context the current task has reached
     seq: int = 0                 # placement order: the most recently placed KV likely sits at the top
     gave_up: bool = False        # already released once during the current tool call
-    compact_next: bool = False   # the owner should compact its prompt before the next request
     timer: asyncio.Task | None = None
     restore: asyncio.Task | None = None
 
@@ -223,7 +222,7 @@ class KVManager:
             rec.family = family_of(profile)
             rec.task_id, rec.profile, rec.peak = task_id, profile, peak
             rec.ctx_tokens = rec.ctx_chars = rec.max_ctx = 0
-            rec.gave_up = rec.compact_next = False
+            rec.gave_up = False
             self._set(rec, "ready" if rec.tokens else "free")
             self.cond.notify_all()
         wait = time.monotonic() - t0
@@ -233,12 +232,6 @@ class KVManager:
         return slot
 
     # --- the agent's hooks ------------------------------------------------------------------
-
-    def wants_compact(self, slot: int) -> bool:
-        rec = self.recs[slot]
-        if self.policy.compact == "always":
-            return True
-        return self.policy.compact == "on_drop" and rec.compact_next
 
     async def before_generate(self, slot: int, prompt_chars: int, n_predict: int,
                               prefix: str | None = None) -> None:
@@ -259,7 +252,6 @@ class KVManager:
             self._set(rec, "active", tokens=need)
             if offloaded:
                 await self._restore(rec, reason="on_demand")
-            rec.compact_next = False
             self.cond.notify_all()
 
     async def after_generate(self, slot: int, prompt_chars: int, res: Any) -> None:
@@ -279,6 +271,16 @@ class KVManager:
                 rec.ctx_chars = 0
                 self._set(rec, "ready", tokens=0)
             self.cond.notify_all()
+
+    async def on_trim(self, slot: int, n_tokens: int, n_chars: int) -> None:
+        """Selective KV deleted n_tokens from the slot in place (and n_chars from the prompt)."""
+        rec = self.recs[slot]
+        async with self.cond:
+            rec.ctx_tokens = max(0, rec.ctx_tokens - n_tokens)
+            rec.ctx_chars = max(0, rec.ctx_chars - n_chars)
+            if rec.state in RESIDENT and rec.tokens:
+                self._set(rec, rec.state, tokens=max(0, rec.tokens - n_tokens))
+            self.cond.notify_all()     # the freed room may let a waiting agent proceed
 
     async def on_tool_start(self, slot: int, true_delay_s: float) -> None:
         rec = self.recs[slot]
@@ -436,8 +438,6 @@ class KVManager:
             await self._slot_op("erase", rec)
             self._set(rec, "dropped")
             kind = "drop"
-        if rec.task_id and kind == "drop" and self.policy.compact == "on_drop":
-            rec.compact_next = True
         rec.gave_up = True
         key = f"{reason}:{kind}"
         self.stats.give_ups[key] = self.stats.give_ups.get(key, 0) + 1

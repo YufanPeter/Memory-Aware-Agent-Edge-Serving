@@ -1,14 +1,12 @@
-"""KV manager (edgeserve/kvm.py) against MockLLM's shared pool, plus context compaction."""
+"""KV manager (edgeserve/kvm.py) against MockLLM's shared pool."""
 import asyncio
 
 from edgeserve.agent import Agent
-from edgeserve.compact import ELIDED, compact
 from edgeserve.events import EventLog
 from edgeserve.kvm import KVManager
 from edgeserve.llm import MockLLM
 from edgeserve.policies import get_policy
 from edgeserve.profiles import Profile
-from edgeserve.prompt import Prompt
 
 DELAY = {"type": "fixed", "seconds": 0.05}
 
@@ -115,66 +113,6 @@ async def test_offload_restores_the_cache(corpus, item):
     # Each step after a tool call reuses the restored KV instead of re-prefilling it.
     for prev, step in zip(trace.steps, trace.steps[1:]):
         assert step.llm["cache_n"] >= prev.llm["prompt_n"] + prev.llm["cache_n"]
-
-
-async def test_dropped_agent_comes_back_compacted(corpus, item):
-    peak = await footprint(corpus, item)
-    pool = int(peak * 2.5)
-    traces, llm, kvm = await run_agents(corpus, item, 4, pool, "base_compact")
-    assert llm.overflows == 0 and all(t.status == "ok" for t in traces)
-    compacted = [t for t in traces if any(k == "obs_elided" for k, _ in t.segments)]
-    drops = sum(v for k, v in kvm.stats.give_ups.items() if k.endswith(":drop"))
-    assert drops == 0 or compacted                        # every dropped agent that resumed was compacted
-
-
-# --- compaction ------------------------------------------------------------------------------
-
-def react_prompt() -> Prompt:
-    p = Prompt()
-    p.add("shared_prefix", "SYSTEM Question: ")
-    p.add("question", "Were Scott Derrickson and Ed Wood of the same nationality?")
-    p.add("control", "<|im_end|><|im_start|>assistant\nThought 1:")
-    p.add("thought_action", " Search Scott Derrickson.\nAction 1: search[Scott Derrickson]")
-    p.add("control", "\nObservation 1: ")
-    p.extend([("obs_meta", "[Scott Derrickson] "), ("obs_sf", "Scott Derrickson is an American director."),
-              ("obs_other", " He lives in Los Angeles."), ("obs_other", " He directs horror films.")])
-    p.add("control", "\nThought 2:")
-    p.add("thought_action", " He is American. Now Ed Wood.\nAction 2: search[Ed Wood]")
-    p.add("control", "\nObservation 2: ")
-    p.extend([("obs_meta", "[Ed Wood] "), ("obs_sf", "Ed Wood was an American filmmaker."),
-              ("obs_other", " He was born in Poughkeepsie.")])
-    p.add("control", "\nThought 3:")
-    return p
-
-
-def test_compact_oracle_keeps_facts_and_latest_observation():
-    p = react_prompt()
-    before = p.text
-    latest = before[before.index("\nObservation 2: "):]
-    r = compact(p, "Were Scott Derrickson and Ed Wood of the same nationality?", "oracle")
-    assert r.sentences_removed == 2 and r.sf_removed == 0 and r.observations == 1
-    assert p.text.endswith(latest)                        # latest observation untouched
-    assert "Scott Derrickson is an American director." + ELIDED in p.text
-    assert "Los Angeles" not in p.text
-    # Everything before the first removed sentence is byte-identical (prefix reuse up to there).
-    cut = before.index(" He lives in")
-    assert p.text[:cut] == before[:cut]
-    assert len(before) - len(p.text) == r.chars_removed
-
-
-def test_compact_is_applied_once_per_observation():
-    p = react_prompt()
-    compact(p, "q", "bm25", keep=0.5)
-    once = p.text
-    r = compact(p, "q", "bm25", keep=0.1)
-    assert p.text == once and r.sentences_removed == 0
-
-
-def test_compact_bm25_prefers_relevant_sentences():
-    p = react_prompt()
-    compact(p, "Were Scott Derrickson and Ed Wood of the same nationality?", "bm25", keep=0.3)   # 1 of 3
-    assert "Scott Derrickson is an American director." in p.text
-    assert "Los Angeles" not in p.text and "horror" not in p.text
 
 
 async def test_admission_reuses_a_stale_slot_of_the_same_family(corpus, item):

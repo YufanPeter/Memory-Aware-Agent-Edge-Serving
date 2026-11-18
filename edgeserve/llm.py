@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -71,8 +72,9 @@ def _slot_result(op: str, slot: int, wall_ms: float, d: dict[str, Any]) -> SlotO
     t = d.get("timings", {})
     return SlotOpResult(
         op=op, slot=slot, ok=True, wall_ms=round(wall_ms, 2),
-        server_ms=float(t.get("save_ms", t.get("restore_ms", 0.0))),
-        n_tokens=int(d.get("n_saved", d.get("n_restored", d.get("n_erased", d.get("n_forked", 0))))),
+        server_ms=float(t.get("save_ms", t.get("restore_ms", t.get("fork_ms", t.get("trim_ms", 0.0))))),
+        n_tokens=int(d.get("n_saved", d.get("n_restored", d.get("n_erased", d.get("n_forked",
+                                                                                 d.get("n_trimmed", 0)))))),
         n_bytes=int(d.get("n_written", d.get("n_read", 0))))
 
 
@@ -116,6 +118,23 @@ class LlamaServerClient:
     async def slot_fork(self, slot: int, src: int, n_tokens: int) -> SlotOpResult:
         """Share the first n_tokens of slot `src` with `slot` without copying (patched server only)."""
         return await self._slot_action(slot, "fork", {"src": src, "n_tokens": n_tokens})
+
+    async def slot_trim(self, slot: int, ranges: list[tuple[int, int]]) -> SlotOpResult:
+        """Delete token ranges [p0, p1) from the slot's KV and shift later tokens down, without
+        recomputing anything (patched server only). Indices refer to the slot's cached tokens."""
+        return await self._slot_action(slot, "trim", {"ranges": [list(r) for r in ranges]})
+
+    async def tokenize(self, text: str) -> list[tuple[int, bytes]]:
+        """(token id, its bytes) for `text`, tokenized exactly as /completion does (special tokens
+        parsed, model's BOS rule applied)."""
+        r = await self._ctl.post("/tokenize", json={"content": text, "add_special": True,
+                                                    "parse_special": True, "with_pieces": True})
+        r.raise_for_status()
+        out = []
+        for t in r.json()["tokens"]:
+            piece = t["piece"]
+            out.append((int(t["id"]), piece.encode("utf-8") if isinstance(piece, str) else bytes(piece)))
+        return out
 
     async def slots_state(self) -> list[dict[str, Any]]:
         r = await self._ctl.get("/slots")
@@ -330,6 +349,31 @@ class MockLLM:
         text = self.slots.pop(slot, "")
         self.shared.pop(slot, None)
         return SlotOpResult("erase", slot, True, n_tokens=self.tokens(text))
+
+    _MOCK_TOKEN = re.compile(r" ?[^\s]+|\s")
+
+    async def tokenize(self, text: str) -> list[tuple[int, bytes]]:
+        """Toy tokenizer for the mock: a token is an optional space plus a run of non-spaces."""
+        return [(hash(p) % 100_000, p.encode("utf-8")) for p in self._MOCK_TOKEN.findall(text)]
+
+    async def slot_trim(self, slot: int, ranges: list[tuple[int, int]]) -> SlotOpResult:
+        """Like the patched server: delete token ranges (mock tokenization) from the slot."""
+        if slot in self._active:
+            return SlotOpResult("trim", slot, False, error="slot busy")
+        text = self.slots.get(slot, "")
+        pieces = self._MOCK_TOKEN.findall(text)
+        starts = [0]
+        for piece in pieces:
+            starts.append(starts[-1] + len(piece))
+        out, last, n = [], 0, 0
+        for p0, p1 in sorted(ranges):
+            if not 0 <= p0 < p1 <= len(pieces):
+                return SlotOpResult("trim", slot, False, error="ranges must be within the slot's tokens")
+            out.append(text[last:starts[p0]])
+            last, n = starts[p1], n + p1 - p0
+        out.append(text[last:])
+        self.slots[slot] = "".join(out)
+        return SlotOpResult("trim", slot, True, n_tokens=n)
 
     async def slot_fork(self, slot: int, src: int, n_tokens: int) -> SlotOpResult:
         """Like the patched server: `slot` shares the first n_tokens of `src` without a copy."""

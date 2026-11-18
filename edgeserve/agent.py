@@ -12,7 +12,6 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from edgeserve.compact import compact
 from edgeserve.corpus import Corpus
 from edgeserve.data import HotpotItem
 from edgeserve.delays import DelaySampler
@@ -49,6 +48,7 @@ class StepRecord:
     arg: str | None = None
     tool_delay_s: float = 0.0
     obs_chars: int = 0
+    trim: dict[str, Any] | None = None   # selective KV applied during this step's tool call
 
 
 @dataclass
@@ -73,18 +73,14 @@ class TaskTrace:
 
 class Agent:
     def __init__(self, llm: Any, corpus: Corpus, events: EventLog, seed: int = 0,
-                 delay_scale: float = 1.0, kvm: Any = None) -> None:
+                 delay_scale: float = 1.0, kvm: Any = None, selective: Any = None) -> None:
         self.llm, self.corpus, self.events = llm, corpus, events
         self.seed, self.delay_scale = seed, delay_scale
         self.kvm = kvm   # edgeserve.kvm.KVManager, or None for the Phase 1 baseline
+        self.selective = selective   # edgeserve.kvtrim.SelectiveKV, or None
 
     async def _generate(self, trace: TaskTrace, prompt: Prompt, step: int, kind: str,
                         n_predict: int, stop: list[str], ignore_eos: bool = False) -> tuple[LLMResult, StepRecord]:
-        if self.kvm is not None and self.kvm.wants_compact(trace.slot):
-            pol = self.kvm.policy
-            question = next((t for k, t in prompt.segments if k == "question"), "")
-            c = compact(prompt, question, pol.compact_scorer, pol.compact_keep)
-            self.events.emit("compact", task_id=trace.task_id, step=step, **asdict(c))
         self.events.emit("req_start", task_id=trace.task_id, step=step, kind=kind, slot=trace.slot,
                          prompt_chars=len(prompt.text))
         if self.kvm is not None:   # may wait for room in the KV pool, restore offloaded KV, or fork the prefix
@@ -104,6 +100,15 @@ class Agent:
             trace.status = "ctx_overflow" if "context" in err.lower() else "llm_error"
             trace.error = err
         return res, rec
+
+    async def _trim(self, trace: TaskTrace, p: Prompt, rec: StepRecord) -> None:
+        r = await self.selective.trim(trace.slot, p)
+        if r is None:
+            return
+        rec.trim = asdict(r)
+        self.events.emit("trim", task_id=trace.task_id, step=rec.step, slot=trace.slot, **rec.trim)
+        if self.kvm is not None and r.tokens:
+            await self.kvm.on_trim(trace.slot, r.tokens, r.chars)
 
     async def run(self, task_id: str, item: HotpotItem, profile: Profile, slot: int = -1) -> TaskTrace:
         trace = TaskTrace(task_id=task_id, qid=item.id, profile=profile.name, qtype=item.qtype, slot=slot)
@@ -178,6 +183,13 @@ class Agent:
                 return
             rec.tool_delay_s = delays.sample(rec.action, self.seed, trace.task_id, n)
             self.events.emit("tool_start", task_id=trace.task_id, step=n, tool=rec.action, delay_s=rec.tool_delay_s)
+            trim_task = None
+            if self.selective is not None:
+                # Selective KV while the slot is idle. With a KV manager it runs first, so the
+                # manager's give-up decision sees the trimmed size; without one it overlaps the tool.
+                trim_task = asyncio.create_task(self._trim(trace, p, rec))
+                if self.kvm is not None:
+                    await trim_task
             if self.kvm is not None:   # the true delay is used only by the clairvoyant reference policy
                 await self.kvm.on_tool_start(trace.slot, rec.tool_delay_s)
             # The tool's own compute (BM25, fuzzy title match) runs in a thread, overlapped with
@@ -186,6 +198,8 @@ class Agent:
             t_tool = time.monotonic()
             obs, _ = await asyncio.gather(asyncio.to_thread(tools.call, rec.action, rec.arg),
                                           asyncio.sleep(rec.tool_delay_s))
+            if trim_task is not None:
+                await trim_task
             rec.obs_chars = len(obs.text)
             trace.sf_seen |= obs.sf_hits
             self.events.emit("tool_end", task_id=trace.task_id, step=n, tool=rec.action, obs_chars=rec.obs_chars,

@@ -12,14 +12,12 @@ Baselines:
 The base (KV-budget admission, never overflow the pool):
   base           admission (overcommit rho) + pre-request gate + pressure-gated drop at tool calls
   base_fork      base + one shared copy of each system prompt via the patched server's fork action
-  base_compact   base + text compaction: an agent whose KV was dropped comes back with its older
-                 observations trimmed and re-prefilled. The re-prefill baseline for selective KV.
+Selective KV is orthogonal to the policy: runner --selective kv|text (edgeserve/kvtrim.py).
 
 Decomposition and references:
   admit_only     admission (rho = 1) + gate, KV always retained
   ttl_fixed_k    fixed K workers + gate + pressure-gated drop (no admission)
   base_oracle    base, but each give-up decision knows the true tool delay
-  compact_static no manager decisions; every request compacts older observations (quality runs)
 """
 from __future__ import annotations
 
@@ -38,9 +36,6 @@ class Policy:
     ttl_s: float = 1.0             # fixed_ttl only
     pressure: float = 0.85         # occupancy share of the pool above which memory is "under pressure"
     margin: float = 0.03           # pool share the gate keeps free (token estimates are approximate)
-    compact: str = "never"         # never | on_drop | always
-    compact_keep: float = 0.3      # share of older observation sentences kept by compaction
-    compact_scorer: str = "bm25"   # bm25 | recency | entity | oracle
     prefetch: bool = True          # restore offloaded KV as soon as the tool returns
     fork_prefix: bool = False      # share the system prefix through the patched server
     pin: bool = True               # worker k uses slot k
@@ -55,11 +50,9 @@ POLICIES: dict[str, Policy] = {p.name: p for p in [
     Policy("always_offload", admission=True, overcommit=1.5, lifecycle="always", give_up="offload"),
     _BASE,
     replace(_BASE, name="base_fork", fork_prefix=True),
-    replace(_BASE, name="base_compact", compact="on_drop"),
     Policy("admit_only", admission=True, overcommit=1.0, lifecycle="retain"),
     Policy("ttl_fixed_k", lifecycle="pressure"),
     replace(_BASE, name="base_oracle", lifecycle="oracle"),
-    Policy("compact_static", gate=False, compact="always"),
 ]}
 
 
