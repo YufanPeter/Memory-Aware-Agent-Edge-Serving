@@ -1,0 +1,1863 @@
+{
+ "uid": "edgeserve-live",
+ "title": "EdgeServe live",
+ "tags": [
+  "edgeserve"
+ ],
+ "schemaVersion": 39,
+ "version": 1,
+ "editable": true,
+ "graphTooltip": 1,
+ "timezone": "browser",
+ "time": {
+  "from": "now-10m",
+  "to": "now"
+ },
+ "refresh": "2s",
+ "timepicker": {
+  "refresh_intervals": [
+   "1s",
+   "2s",
+   "5s",
+   "10s",
+   "30s"
+  ]
+ },
+ "templating": {
+  "list": [
+   {
+    "name": "run",
+    "label": "run",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "prom"
+    },
+    "query": {
+     "query": "label_values(edgeserve_run_info, run)",
+     "refId": "run"
+    },
+    "definition": "label_values(edgeserve_run_info, run)",
+    "refresh": 2,
+    "multi": true,
+    "includeAll": true,
+    "sort": 1,
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    }
+   }
+  ]
+ },
+ "annotations": {
+  "list": []
+ },
+ "description": "Live view of the run currently being written to results/ (exporter.py live).",
+ "panels": [
+  {
+   "type": "row",
+   "title": "$run",
+   "repeat": "run",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 1
+   },
+   "panels": [],
+   "id": 1
+  },
+  {
+   "type": "stat",
+   "title": "Run",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 1,
+    "w": 6,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_run_info{run=~\"$run\"}",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "blue"
+     },
+     "displayName": "${__field.labels.policy} \u00b7 K=${__field.labels.k} \u00b7 ${__field.labels.workload}"
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "name",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 2
+  },
+  {
+   "type": "stat",
+   "title": "Pool budget",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 6,
+    "y": 1,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_pool_budget_tokens{run=~\"$run\"}",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "purple"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 3
+  },
+  {
+   "type": "stat",
+   "title": "Elapsed",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 9,
+    "y": 1,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_run_elapsed_seconds{run=~\"$run\"}",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "text"
+     },
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 4
+  },
+  {
+   "type": "stat",
+   "title": "Tasks done",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 1,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_tasks_done_total{run=~\"$run\"}",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "green"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 5
+  },
+  {
+   "type": "stat",
+   "title": "Correct (EM)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 15,
+    "y": 1,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_tasks_em_total{run=~\"$run\"}",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "green"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 6
+  },
+  {
+   "type": "stat",
+   "title": "Mean F1",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 18,
+    "y": 1,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_tasks_f1_total{run=~\"$run\"} / clamp_min(edgeserve_tasks_done_total{run=~\"$run\"}, 1)",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "green"
+     },
+     "decimals": 3
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 7
+  },
+  {
+   "type": "stat",
+   "title": "Failed tasks",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 21,
+    "y": 1,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_tasks_failed_total{run=~\"$run\"}",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "red"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 8
+  },
+  {
+   "type": "stat",
+   "title": "Goodput (avg/min)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 4,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "60 * edgeserve_tasks_em_total{run=~\"$run\"} / clamp_min(edgeserve_run_elapsed_seconds{run=~\"$run\"}, 1)",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "green"
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 9
+  },
+  {
+   "type": "stat",
+   "title": "Throughput (avg/min)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 3,
+    "y": 4,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "60 * edgeserve_tasks_done_total{run=~\"$run\"} / clamp_min(edgeserve_run_elapsed_seconds{run=~\"$run\"}, 1)",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "blue"
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 10
+  },
+  {
+   "type": "stat",
+   "title": "Task latency p95",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 6,
+    "y": 4,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.95, edgeserve_task_latency_seconds_bucket{run=~\"$run\"})",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "orange"
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 11
+  },
+  {
+   "type": "stat",
+   "title": "Service time p95",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 9,
+    "y": 4,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.95, edgeserve_task_service_seconds_bucket{run=~\"$run\"})",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "orange"
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 12
+  },
+  {
+   "type": "stat",
+   "title": "TTFT p50",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 4,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.5, edgeserve_request_ttft_seconds_bucket{run=~\"$run\"})",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "yellow"
+     },
+     "decimals": 2
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 13
+  },
+  {
+   "type": "stat",
+   "title": "TTFT p95",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 15,
+    "y": 4,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.95, edgeserve_request_ttft_seconds_bucket{run=~\"$run\"})",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "yellow"
+     },
+     "decimals": 2
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 14
+  },
+  {
+   "type": "stat",
+   "title": "TPOT p50",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 18,
+    "y": 4,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.5, edgeserve_request_tpot_ms_bucket{run=~\"$run\"})",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "purple"
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 15
+  },
+  {
+   "type": "stat",
+   "title": "TPOT p95",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 21,
+    "y": 4,
+    "w": 3,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.95, edgeserve_request_tpot_ms_bucket{run=~\"$run\"})",
+     "legendFormat": "",
+     "refId": "A",
+     "range": false,
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "purple"
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none"
+   },
+   "id": 16
+  },
+  {
+   "type": "timeseries",
+   "title": "KV pool occupancy (tokens)",
+   "description": "KV tokens held in the pool, by what their owner is doing: active (prefill/decode or about to send), tool_wait (agent waiting on a tool), stale (task finished, KV not yet reused), shared_prefix (forked system prompt). Dashed line: pool size (-c). Above it = overflow.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 7,
+    "w": 12,
+    "h": 9
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_pool_kv_tokens{run=~\"$run\"}",
+     "legendFormat": "{{state}}",
+     "refId": "A",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_pool_budget_tokens{run=~\"$run\"}",
+     "legendFormat": "budget",
+     "refId": "B",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 60,
+      "showPoints": "never",
+      "lineInterpolation": "stepAfter",
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      }
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "budget"
+      },
+      "properties": [
+       {
+        "id": "custom.stacking",
+        "value": {
+         "mode": "none"
+        }
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          10,
+          10
+         ]
+        }
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 2
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#f2495c"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "active"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#73bf69"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "tool_wait"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#b877d9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "stale"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#8f6b4a"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "shared_prefix"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#ffcb7d"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 17
+  },
+  {
+   "type": "timeseries",
+   "title": "KV tokens per slot",
+   "description": "Each slot's KV tokens, stacked. Without a KV manager these are rebuilt from per-request token counts; llama-server purges are not visible.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 7,
+    "w": 12,
+    "h": 9
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_slot_kv_tokens{run=~\"$run\"}",
+     "legendFormat": "slot {{slot}}",
+     "refId": "A",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 40,
+      "showPoints": "never",
+      "lineInterpolation": "stepAfter",
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 18
+  },
+  {
+   "type": "state-timeline",
+   "title": "Slot timeline",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "description": "One row per slot. prefill / decode split only in replay (live shows 'active').",
+   "gridPos": {
+    "x": 0,
+    "y": 16,
+    "w": 24,
+    "h": 11
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_slot_state{run=~\"$run\"}",
+     "legendFormat": "slot {{slot}}",
+     "refId": "A",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "empty",
+         "color": "#3a3a3a",
+         "index": 0
+        },
+        "1": {
+         "text": "prefill",
+         "color": "#ff9830",
+         "index": 1
+        },
+        "2": {
+         "text": "decode",
+         "color": "#73bf69",
+         "index": 2
+        },
+        "3": {
+         "text": "active",
+         "color": "#56a64b",
+         "index": 3
+        },
+        "4": {
+         "text": "ready",
+         "color": "#8ab8ff",
+         "index": 4
+        },
+        "5": {
+         "text": "tool wait",
+         "color": "#b877d9",
+         "index": 5
+        },
+        "6": {
+         "text": "gate wait",
+         "color": "#fade2a",
+         "index": 6
+        },
+        "7": {
+         "text": "stale",
+         "color": "#8f6b4a",
+         "index": 7
+        },
+        "8": {
+         "text": "shared prefix",
+         "color": "#ffcb7d",
+         "index": 8
+        },
+        "9": {
+         "text": "offloaded",
+         "color": "#5794f2",
+         "index": 9
+        },
+        "10": {
+         "text": "dropped",
+         "color": "#f2495c",
+         "index": 10
+        },
+        "11": {
+         "text": "reserved",
+         "color": "#9fa7b3",
+         "index": 11
+        },
+        "12": {
+         "text": "error",
+         "color": "#c4162a",
+         "index": 12
+        }
+       }
+      }
+     ],
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3a3a3a"
+     },
+     "custom": {
+      "lineWidth": 0,
+      "fillOpacity": 85
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "mergeValues": true,
+    "showValue": "never",
+    "rowHeight": 0.85,
+    "alignValue": "left",
+    "legend": {
+     "showLegend": true,
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "single"
+    }
+   },
+   "id": 19
+  },
+  {
+   "type": "timeseries",
+   "title": "Tasks",
+   "description": "queued = arrived but not admitted; running = admitted, not finished.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 27,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_tasks{run=~\"$run\"}",
+     "legendFormat": "{{phase}}",
+     "refId": "A",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_requests_inflight{run=~\"$run\"}",
+     "legendFormat": "LLM requests in flight",
+     "refId": "B",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "lineInterpolation": "stepAfter",
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 20
+  },
+  {
+   "type": "timeseries",
+   "title": "Throughput and goodput (tasks/min, 30 s window)",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 27,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "rate(edgeserve_tasks_done_total{run=~\"$run\"}[30s]) * 60",
+     "legendFormat": "throughput",
+     "refId": "A",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "rate(edgeserve_tasks_em_total{run=~\"$run\"}[30s]) * 60",
+     "legendFormat": "goodput (EM-correct)",
+     "refId": "B",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "lineInterpolation": "stepAfter",
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      }
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "throughput"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#5794f2"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "goodput (EM-correct)"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#73bf69"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 21
+  },
+  {
+   "type": "timeseries",
+   "title": "Failures and slot operations (cumulative)",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 27,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_requests_failed_total{run=~\"$run\"}",
+     "legendFormat": "failed requests",
+     "refId": "A",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_tasks_failed_total{run=~\"$run\"}",
+     "legendFormat": "failed tasks",
+     "refId": "B",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_slot_ops_total{run=~\"$run\"}",
+     "legendFormat": "slot {{op}}",
+     "refId": "C",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_compactions_total{run=~\"$run\"}",
+     "legendFormat": "compactions",
+     "refId": "D",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "lineInterpolation": "stepAfter",
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 22
+  },
+  {
+   "type": "timeseries",
+   "title": "Task latency (s, 30 s window)",
+   "description": "Latency = arrival to done (includes queueing); service = admission to done. Quantiles are interpolated inside histogram buckets.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 35,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.5, rate(edgeserve_task_latency_seconds_bucket{run=~\"$run\"}[30s]))",
+     "legendFormat": "latency p50",
+     "refId": "A",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.95, rate(edgeserve_task_latency_seconds_bucket{run=~\"$run\"}[30s]))",
+     "legendFormat": "latency p95",
+     "refId": "B",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.5, rate(edgeserve_task_service_seconds_bucket{run=~\"$run\"}[30s]))",
+     "legendFormat": "service p50",
+     "refId": "C",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.95, rate(edgeserve_task_service_seconds_bucket{run=~\"$run\"}[30s]))",
+     "legendFormat": "service p95",
+     "refId": "D",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "min": 0,
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "lineInterpolation": "stepAfter",
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 23
+  },
+  {
+   "type": "timeseries",
+   "title": "TTFT (s, 30 s window)",
+   "description": "Time to first token per LLM request: waiting in the server + prefill.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 35,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.5, rate(edgeserve_request_ttft_seconds_bucket{run=~\"$run\"}[30s]))",
+     "legendFormat": "p50",
+     "refId": "A",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.95, rate(edgeserve_request_ttft_seconds_bucket{run=~\"$run\"}[30s]))",
+     "legendFormat": "p95",
+     "refId": "B",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "min": 0,
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "lineInterpolation": "stepAfter",
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 24
+  },
+  {
+   "type": "timeseries",
+   "title": "TPOT (ms per output token, 30 s window)",
+   "description": "Decode time per generated token. Grows with the number of decoding slots and with the unified-pool attention span.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 35,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.5, rate(edgeserve_request_tpot_ms_bucket{run=~\"$run\"}[30s]))",
+     "legendFormat": "p50",
+     "refId": "A",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "histogram_quantile(0.95, rate(edgeserve_request_tpot_ms_bucket{run=~\"$run\"}[30s]))",
+     "legendFormat": "p95",
+     "refId": "B",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "min": 0,
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "lineInterpolation": "stepAfter",
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 25
+  },
+  {
+   "type": "timeseries",
+   "title": "GPU memory and server RSS (MiB)",
+   "description": "GPU memory is fixed at startup (weights + preallocated KV pool), so this line is flat; what changes is how the pool is used (panels above).",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 43,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_gpu_mem_mib{run=~\"$run\"}",
+     "legendFormat": "GPU memory used",
+     "refId": "A",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_server_rss_mib{run=~\"$run\"}",
+     "legendFormat": "llama-server RSS",
+     "refId": "B",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "decmbytes",
+     "min": 0,
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "lineInterpolation": "stepAfter",
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 26
+  },
+  {
+   "type": "timeseries",
+   "title": "GPU utilisation (%)",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 43,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_gpu_util_percent{run=~\"$run\"}",
+     "legendFormat": "GPU util",
+     "refId": "A",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "min": 0,
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "lineInterpolation": "stepAfter",
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 27
+  },
+  {
+   "type": "timeseries",
+   "title": "Server token rates (tokens/s, 10 s window)",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 43,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "rate(edgeserve_llama_prompt_tokens_total{run=~\"$run\"}[10s])",
+     "legendFormat": "prefill",
+     "refId": "A",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "rate(edgeserve_llama_tokens_predicted_total{run=~\"$run\"}[10s])",
+     "legendFormat": "decode",
+     "refId": "B",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "rate(edgeserve_llama_prompt_tokens_cached_total{run=~\"$run\"}[10s])",
+     "legendFormat": "prefix-cache reuse",
+     "refId": "C",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "lineInterpolation": "stepAfter",
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 28
+  }
+ ]
+}

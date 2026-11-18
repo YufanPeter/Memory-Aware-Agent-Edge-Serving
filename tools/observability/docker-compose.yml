@@ -1,0 +1,48 @@
+# EdgeServe observability stack: Prometheus (127.0.0.1:9090) + Grafana (127.0.0.1:3000).
+# Both use the host network and listen on localhost only; reach Grafana through an SSH tunnel
+# (ssh -L 3000:localhost:3000 mem-aws) or VS Code port forwarding. See README.md.
+services:
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    network_mode: host
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=3650d     # replayed runs sit at 2026-01-01; keep them
+      - --web.listen-address=127.0.0.1:9090
+      - --web.enable-admin-api                  # lets us delete a replayed run's series
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./backfill:/backfill:ro
+      - prom-data:/prometheus
+  grafana:
+    image: grafana/grafana-oss:11.4.0
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      GF_SERVER_HTTP_ADDR: 127.0.0.1
+      GF_SERVER_HTTP_PORT: "3000"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 1s
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/edgeserve_live.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_RENDERING_SERVER_URL: http://127.0.0.1:8081/render     # used only if the renderer runs
+      GF_RENDERING_CALLBACK_URL: http://127.0.0.1:3000/
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+  # Optional: panel -> PNG export (report figures). Start with: docker compose --profile render up -d
+  renderer:
+    image: grafana/grafana-image-renderer:3.11.6
+    network_mode: host
+    profiles: ["render"]
+    environment:
+      HTTP_HOST: 127.0.0.1
+      HTTP_PORT: "8081"
+volumes:
+  prom-data:
+  grafana-data:
