@@ -1,0 +1,11 @@
+# Phase 2 base smoke test on the real server (16k pool, long-context mix, 50 dev questions).
+# Checks that the KV manager never lets the pool overflow and that its token accounting is
+# conservative. fixed_k8 is expected to fail (Phase 1 E2: K=8 does not fit a 16k pool).
+name: p2_smoke
+defaults: {ctx: 16384, parallel: 64, workload: workloads/p2_long_dev50.json, delay_scale: 1.0}
+points:
+  - {name: fixed_k4, k: 4}
+  - {name: fixed_k8, k: 8}
+  - {name: gate_k8, k: 8, policy: ttl_fixed_k}
+  - {name: admit_only, k: 4, policy: admit_only}
+  - {name: base, k: 4, policy: base}

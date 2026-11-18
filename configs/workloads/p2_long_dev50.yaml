@@ -1,0 +1,8 @@
+# Phase 2 smoke and tuning: the long-context-heavy mix of E2 (where memory pressure appears),
+# 50 dev-split questions released at t=0. Used to check the KV manager on the real server.
+name: p2_long_dev50
+split: dev
+n_tasks: 50
+seed: 0
+mix: {react_long: 0.7, react_short: 0.3}
+arrival: {type: batch}

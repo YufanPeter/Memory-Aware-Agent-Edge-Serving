@@ -57,6 +57,25 @@ def run_row(run: Path) -> dict[str, Any]:
     row.update({f"kv_{m}": kv.get(m) for m in KV})
     for s, v in (kv.get("share") or {}).items():
         row[f"kv_share_{s}"] = v
+    # Phase 2: the policy and what the KV manager did (absent for Phase 1 runs).
+    pol = meta.get("policy") or {}
+    row["policy"] = pol.get("name", "fixed_k" if meta["pin_slots"] else "llamacpp")
+    row["overcommit"] = pol.get("overcommit") if pol.get("admission") else None
+    km = summary.get("kvm") or {}
+    if km:
+        gu = km.get("give_ups", {})
+        row.update({"kvm_drops": sum(v for k, v in gu.items() if k.endswith(":drop")),
+                    "kvm_offloads": sum(v for k, v in gu.items() if k.endswith(":offload")),
+                    "kvm_stale_erased": sum(v for k, v in gu.items() if k.endswith(":stale")),
+                    "kvm_gate_wait_s": km.get("gate_wait_s"), "kvm_admit_wait_s": km.get("admit_wait_s"),
+                    "kvm_slot_op_ms": km.get("slot_op_ms"), "kvm_slot_op_failures": km.get("slot_op_failures"),
+                    "kvm_peak_resident": km.get("peak_resident_tokens")})
+        compacts = [json.loads(line) for line in open(run / "events.jsonl", encoding="utf-8")
+                    if '"compact"' in line]
+        compacts = [c for c in compacts if c.get("type") == "compact"]
+        row["compactions"] = sum(1 for c in compacts if c.get("sentences_removed"))
+        row["compact_sf_removed"] = sum(c.get("sf_removed", 0) for c in compacts)
+    row["sf_recall"] = summary.get("sf_recall")
     return row
 
 

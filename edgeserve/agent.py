@@ -12,6 +12,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from edgeserve.compact import compact
 from edgeserve.corpus import Corpus
 from edgeserve.data import HotpotItem
 from edgeserve.delays import DelaySampler
@@ -72,15 +73,26 @@ class TaskTrace:
 
 class Agent:
     def __init__(self, llm: Any, corpus: Corpus, events: EventLog, seed: int = 0,
-                 delay_scale: float = 1.0) -> None:
+                 delay_scale: float = 1.0, kvm: Any = None) -> None:
         self.llm, self.corpus, self.events = llm, corpus, events
         self.seed, self.delay_scale = seed, delay_scale
+        self.kvm = kvm   # edgeserve.kvm.KVManager, or None for the Phase 1 baseline
 
     async def _generate(self, trace: TaskTrace, prompt: Prompt, step: int, kind: str,
                         n_predict: int, stop: list[str], ignore_eos: bool = False) -> tuple[LLMResult, StepRecord]:
+        if self.kvm is not None and self.kvm.wants_compact(trace.slot):
+            pol = self.kvm.policy
+            question = next((t for k, t in prompt.segments if k == "question"), "")
+            c = compact(prompt, question, pol.compact_scorer, pol.compact_keep)
+            self.events.emit("compact", task_id=trace.task_id, step=step, **asdict(c))
         self.events.emit("req_start", task_id=trace.task_id, step=step, kind=kind, slot=trace.slot,
                          prompt_chars=len(prompt.text))
+        if self.kvm is not None:   # may wait for room in the KV pool, restore offloaded KV, or fork the prefix
+            prefix = prompt.segments[0][1] if prompt.segments and prompt.segments[0][0] == "shared_prefix" else None
+            await self.kvm.before_generate(trace.slot, len(prompt.text), n_predict, prefix)
         res = await self.llm.generate(prompt.text, n_predict, stop, trace.slot, ignore_eos)
+        if self.kvm is not None:
+            await self.kvm.after_generate(trace.slot, len(prompt.text), res)
         info = res.to_dict()
         for k in ("t_start", "t_first_token", "t_end"):
             info[k] = self.events.rel(info[k]) if info[k] else None
@@ -166,6 +178,8 @@ class Agent:
                 return
             rec.tool_delay_s = delays.sample(rec.action, self.seed, trace.task_id, n)
             self.events.emit("tool_start", task_id=trace.task_id, step=n, tool=rec.action, delay_s=rec.tool_delay_s)
+            if self.kvm is not None:   # the true delay is used only by the clairvoyant reference policy
+                await self.kvm.on_tool_start(trace.slot, rec.tool_delay_s)
             # The tool's own compute (BM25, fuzzy title match) runs in a thread, overlapped with
             # the seeded delay: it does not block other agents, and the idle gap is
             # max(delay, compute) instead of delay + compute.
@@ -176,6 +190,8 @@ class Agent:
             trace.sf_seen |= obs.sf_hits
             self.events.emit("tool_end", task_id=trace.task_id, step=n, tool=rec.action, obs_chars=rec.obs_chars,
                              idle_s=round(time.monotonic() - t_tool, 4))
+            if self.kvm is not None:
+                await self.kvm.on_tool_end(trace.slot)
             p.add("control", f"\nObservation {n}: ")
             p.extend(obs.pieces)
         else:

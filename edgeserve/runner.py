@@ -1,5 +1,6 @@
 """Replay a frozen workload against llama-server with FIFO admission and fixed
-concurrency K (the Phase 1 baseline).
+concurrency K (the Phase 1 baseline), or under a Phase 2 KV-management policy
+(--policy, see edgeserve/policies.py).
 
 Tasks enter one FIFO queue at their arrival time; K workers each take the next
 task and run it to completion. Worker k sends every request with id_slot=k, so a
@@ -7,6 +8,10 @@ task's whole conversation stays in one slot's KV cache while it waits for tools.
 
     uv run python -m edgeserve.runner --workload workloads/smoke.json --k 4 --out results/smoke_k4
     uv run python -m edgeserve.runner --workload workloads/smoke.json --k 2 --mock   # no server needed
+    uv run python -m edgeserve.runner --workload workloads/smoke.json --policy base --pool-tokens 16384 --out ...
+
+With a policy that admits by projected KV (base, base_fork, base_compact, admit_only, always_offload) the number of
+workers is the server's slot count (or --slots), and admission decides how many run at once.
 
 Outputs in --out: events.jsonl, tasks.jsonl, meta.json, summary.json.
 """
@@ -33,7 +38,9 @@ from edgeserve.corpus import Corpus
 from edgeserve.data import load_split
 from edgeserve.eval import exact_match, f1_score, sf_recall
 from edgeserve.events import EventLog
+from edgeserve.kvm import N_GOLDEN, KVManager
 from edgeserve.llm import LlamaServerClient, MockLLM
+from edgeserve.policies import get_policy
 from edgeserve.profiles import PROFILES_PATH, load_profiles
 from edgeserve.workload import load_workload
 
@@ -159,18 +166,33 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     items = {it.id: it for it in load_split(wl["meta"].get("split", "dev"))}
     corpus = Corpus.load(with_bm25=True)   # search suggestions and react_long neighbors
 
+    policy = get_policy(args.policy, overcommit=args.overcommit, pressure=args.pressure,
+                        compact_scorer=args.compact_scorer, compact_keep=args.compact_keep)
+    pin = args.pin and policy.pin
     llm: Any
     if args.mock:
-        llm = MockLLM(mock_script, prefill_s_per_token=1e-5, decode_s_per_token=1e-3)
+        llm = MockLLM(mock_script, prefill_s_per_token=1e-5, decode_s_per_token=1e-3,
+                      pool_tokens=args.pool_tokens or 0, tax_s_per_kv_token=args.mock_tax or 0.0)
     else:
         llm = LlamaServerClient(args.base_url, seed=args.seed, cache_prompt=not args.no_cache)
     props = await llm.props()
     total_slots = props.get("total_slots")
-    if args.pin and total_slots is not None and args.k > total_slots:
-        raise SystemExit(f"K={args.k} but the server has only {total_slots} slots (--parallel)")
+    n_workers = args.k
+    n_slots = args.slots or total_slots or 64
+    if policy.admission:   # admission, not the worker count, limits concurrency
+        n_workers = n_slots - (N_GOLDEN if policy.fork_prefix else 0)   # golden slots hold shared prefixes
+    elif policy.fork_prefix:
+        raise SystemExit("fork_prefix needs an admission policy (the manager must choose slots)")
+    if pin and total_slots is not None and n_workers > total_slots:
+        raise SystemExit(f"{n_workers} workers but the server has only {total_slots} slots (--parallel)")
 
     events = EventLog(out / "events.jsonl")
-    agent = Agent(llm, corpus, events, seed=args.seed, delay_scale=args.delay_scale)
+    kvm = None
+    if policy.managed:
+        if not args.pool_tokens:
+            raise SystemExit(f"--policy {policy.name} needs --pool-tokens (the server's -c)")
+        kvm = KVManager(llm, events, policy, args.pool_tokens, n_slots if policy.admission else n_workers)
+    agent = Agent(llm, corpus, events, seed=args.seed, delay_scale=args.delay_scale, kvm=kvm)
     queue: asyncio.Queue = asyncio.Queue()
     rows: list[dict[str, Any]] = []
     tasks_f = open(out / "tasks.jsonl", "w", buffering=1, encoding="utf-8", newline="\n")
@@ -182,13 +204,15 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                 await asyncio.sleep(delay)
             events.emit("task_arrive", task_id=t["task_id"], profile=t["profile"])
             await queue.put((t, time.monotonic()))
-        for _ in range(args.k):
+        for _ in range(n_workers):
             await queue.put(None)
 
     async def worker(k: int) -> None:
-        slot = k if args.pin else -1
+        slot = k if pin else -1
         while (entry := await queue.get()) is not None:
             t, t_arrive = entry
+            if kvm is not None:   # under KV admission the manager picks the slot (prefix reuse)
+                slot = await kvm.admit(t["task_id"], t["profile"], None if policy.admission else slot)
             t_admit = time.monotonic()
             events.emit("task_admit", task_id=t["task_id"], worker=k, slot=slot)
             item = items[t["qid"]]
@@ -200,6 +224,9 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             except Exception as e:   # one broken task must not abort the whole run
                 trace = TaskTrace(t["task_id"], item.id, t["profile"], item.qtype, slot, status="error",
                                   error=f"{type(e).__name__}: {e}"[:500])
+            finally:
+                if kvm is not None:
+                    await kvm.release(slot)
             t_done = time.monotonic()
             row = {
                 "task_id": t["task_id"], "qid": item.id, "profile": t["profile"], "qtype": item.qtype,
@@ -219,7 +246,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     mon = asyncio.create_task(_monitor(events, None if args.mock else args.base_url,
                                        args.server_pid, args.sample_interval, stop))
     t0 = time.monotonic()
-    await asyncio.gather(arrive(), *(worker(k) for k in range(args.k)))
+    await asyncio.gather(arrive(), *(worker(k) for k in range(n_workers)))
     makespan = time.monotonic() - t0
     stop.set()
     await mon
@@ -229,7 +256,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
 
     meta = {
         "workload": args.workload, "workload_sha": hashlib.sha256(wl_text.encode()).hexdigest()[:16],
-        "workload_meta": wl["meta"], "k": args.k, "pin_slots": args.pin, "cache_prompt": not args.no_cache,
+        "workload_meta": wl["meta"], "k": args.k, "workers": n_workers, "pin_slots": pin,
+        "cache_prompt": not args.no_cache, "policy": policy.__dict__, "pool_tokens": args.pool_tokens,
         "delay_scale": args.delay_scale, "seed": args.seed, "mock": args.mock,
         "profiles": {n: p.__dict__ for n, p in profiles.items()},
         "server_props": {k: props.get(k) for k in ("build_info", "model_path", "total_slots",
@@ -241,6 +269,10 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         meta["server_cmd"] = (out / "server_cmd.txt").read_text(encoding="utf-8").strip()
     (out / "meta.json").write_text(json.dumps(meta, indent=1, default=str), encoding="utf-8", newline="\n")
     summary = summarize(rows, makespan)
+    if kvm is not None:
+        summary["kvm"] = kvm.summary()
+    if isinstance(llm, MockLLM) and llm.pool_tokens:
+        summary["mock_pool"] = {"overflows": llm.overflows, "server_purges": len(llm.purges)}
     (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8", newline="\n")
     return summary
 
@@ -260,6 +292,15 @@ def main() -> None:
     ap.add_argument("--server-pid", type=int, help="sample this process's RSS")
     ap.add_argument("--sample-interval", type=float, default=1.0)
     ap.add_argument("--mock", action="store_true", help="use the scripted MockLLM instead of a server")
+    ap.add_argument("--policy", default="fixed_k", help="Phase 2 configuration (edgeserve/policies.py)")
+    ap.add_argument("--pool-tokens", type=int, help="KV pool size in tokens (the server's -c); the mock enforces it")
+    ap.add_argument("--slots", type=int, help="workers under an admission policy (default: server slots)")
+    ap.add_argument("--overcommit", type=float, help="override the policy's rho")
+    ap.add_argument("--pressure", type=float, help="override the policy's pressure threshold")
+    ap.add_argument("--compact-scorer", choices=["bm25", "entity", "recency", "oracle"])
+    ap.add_argument("--compact-keep", type=float, help="share of older observation sentences kept")
+    ap.add_argument("--mock-tax", type=float, help="MockLLM only: extra decode seconds per generated token for "
+                    "every resident KV token (models the unified-pool attention span measured in X1)")
     args = ap.parse_args()
     print(json.dumps(asyncio.run(run(args)), indent=1))
 

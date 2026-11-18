@@ -14,6 +14,14 @@ Spec:
       - {name: k1, workload: workloads/p1_mixed_50.json, k: 1}
       - {name: k8, workload: workloads/p1_mixed_200.json, k: 8, reps: 3}
 `parallel: k` sets -np to the point's K (the llama.cpp-default baseline).
+Phase 2 keys (passed to the runner; see edgeserve/policies.py):
+    policy: base          # default fixed_k (Phase 1 behaviour)
+    overcommit: 1.5       # rho, admission policies only
+    pressure: 0.85
+    compact_scorer: bm25
+    compact_keep: 0.3
+    llama_server: <path>  # e.g. the patched build for the fork policy (default: $LLAMA_SERVER)
+The runner gets --pool-tokens = ctx for every managed policy.
 Results: results/<name>/<point>/rep<i>/ (runner outputs + server_cmd.txt + server.log).
 """
 from __future__ import annotations
@@ -32,7 +40,9 @@ import httpx
 import yaml
 
 DEFAULTS: dict[str, Any] = {"ctx": 65536, "parallel": 64, "cache_ram": 0, "extra": "", "delay_scale": 1.0,
-                            "pin": True, "cache": True, "reps": 1, "task_timeout": 900, "seed": 0, "port": 8080}
+                            "pin": True, "cache": True, "reps": 1, "task_timeout": 900, "seed": 0, "port": 8080,
+                            "policy": "fixed_k"}
+RUNNER_OPTS = ("overcommit", "pressure", "compact_scorer", "compact_keep", "slots")
 
 
 def wait_healthy(url: str, proc: subprocess.Popen, timeout_s: float = 300.0) -> bool:
@@ -71,6 +81,12 @@ def run_point(name: str, p: dict[str, Any], rep: int, out: Path, dry: bool) -> N
         runner.append("--no-pin")
     if not p["cache"]:
         runner.append("--no-cache")
+    runner += ["--policy", p["policy"], "--pool-tokens", str(p["ctx"])]
+    for key in RUNNER_OPTS:
+        if p.get(key) is not None:
+            runner += [f"--{key.replace('_', '-')}", str(p[key])]
+    if p.get("llama_server"):
+        env["LLAMA_SERVER"] = os.path.expanduser(p["llama_server"])
     if dry:
         print(f"[dry] {name} rep{rep}: CTX={env['CTX']} PARALLEL={parallel} CACHE_RAM={env['CACHE_RAM']} "
               f"EXTRA='{p['extra']}' | {' '.join(runner[3:])}")

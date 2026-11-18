@@ -1,0 +1,11 @@
+# Phase 2 base tuning on dev: how far can admission overcommit (rho) before the gate starts
+# thrashing? 16k pool, long-context mix, 50 dev questions. Compare with p2_smoke/fixed_k4.
+# (The manager now picks slots for prefix reuse under admission.)
+name: p2_rho
+defaults: {ctx: 16384, parallel: 64, workload: workloads/p2_long_dev50.json, delay_scale: 1.0, k: 4}
+points:
+  - {name: admit_only, policy: admit_only}
+  - {name: base_r1.5, policy: base, overcommit: 1.5}
+  - {name: base_r2.0, policy: base, overcommit: 2.0}
+  - {name: base_r2.5, policy: base, overcommit: 2.5}
+  - {name: base_r3.0, policy: base, overcommit: 3.0}
