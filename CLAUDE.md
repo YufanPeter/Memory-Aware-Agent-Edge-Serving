@@ -16,7 +16,7 @@ Liu, Kaiqi Han, Tianyu Xu, You Chen, Yufan Shi.
      the system prompt (fork patch). Infrastructure, not the contribution.
   2. *Selective KV* (main contribution): keep only the useful segments of an agent's KV and delete
      the rest in place (llama-server patch: `seq_rm` + `seq_add`, like context shift), no
-     re-prefill, triggered by memory pressure. Text compaction + re-prefill is the baseline.
+     re-prefill, triggered by memory pressure. Text-only deletion + re-prefill is the baseline.
   3. *Idea B*: grouped KV pool between `--kv-unified` and per-slot KV (llama.cpp patch), agents
      bin-packed by projected peak, migrated with save/restore.
 - The instructor said scheduling alone earns only a regular grade; the KV work is the
@@ -48,7 +48,15 @@ recomputed tokens and prefix-cache hits explain the results.
 - **Stage 1 done** (`docs/phase2_ideas.md` §3): trimming `react_long` observations to the paragraph
   halves peak KV and doubles goodput at equal F1, so observation text is the main KV waste; this
   motivates selective KV. Idea A (pressure-adaptive trimming) was dropped.
-- **Next: selective KV step 1 (feasibility)**: the trim patch and client token alignment.
+- **Selective KV steps 1–2 done** (`docs/phase2_ideas.md` §4): the trim patch works (in-place deletion,
+  ~1.5 ms, full cache reuse, memory freed); on dev 200 (ample pool) BM25-30% "trim after use" cuts
+  peak-KV p95 by 26% at unchanged F1, and in-place deletion beats text compaction + re-prefill
+  (same F1, 11–14% higher goodput). Chosen for step 3: `--selective kv --sel-scorer bm25
+  --sel-keep 0.3 --sel-keep-last 0`.
+- **Next: selective KV step 3** (serving on a tight pool), design agreed 2026-11-18
+  (`docs/phase2_ideas.md` §4.3): default 4-profile mix, bursty arrivals at ~50/80/110% of capacity,
+  16k pool, 5 configs (fixed K*, base_fork, + selective text, + selective kv always, + kv on pressure).
+  First: implement the pressure trigger and generate the workloads, tune on dev, final on test.
 - Development is on the AWS instance (see AWS below); the Mac is for MockLLM work.
 
 ## Phase 1 findings (A10G, 7B, 5,890 tasks)
@@ -89,9 +97,8 @@ recomputed tokens and prefix-cache hits explain the results.
 Work one step at a time: define the scenarios (workload mix, pool sizes, question set, baselines)
 before running experiments, report, and wait for the user's go-ahead before the next step.
 
-1. Selective KV: (1) feasibility: llama-server "trim range" patch + client token alignment, check
-   cache reuse and outputs after a trim; (2) quality runs: scorer × keep ratio vs F1 and KV saved,
-   against text compaction + re-prefill; (3) serving runs on tight pools: base vs base + selective KV.
+1. Selective KV: (1) feasibility and (2) quality runs are done; (3) serving runs on a tight pool with
+   bursty arrivals and the default mix, as designed in `docs/phase2_ideas.md` §4.3.
 2. Base: formal scenarios, tune fixed K and rho on dev, repeats (can be folded into step 1.3).
 3. Idea B: ~1 day feasibility check of the grouped-stream patch, then decide.
 4. Final report and reproducibility package by 12/9.
@@ -132,14 +139,15 @@ before running experiments, report, and wait for the user's go-ahead before the 
   resumable).
 - Phase 2: `kvm.py` (KV manager: accounting, admission, gate, give-up/restore, fork, `kv_state`
   events) · `policies.py` (configs: baselines `fixed_k`/`per_slot`/`llamacpp`/`always_offload`,
-  `base`, `base_fork`, `base_compact`, decomposition cells) · `compact.py` (text compaction with
-  oracle/bm25/entity/recency scorers). `llm.py` has slot save/restore/erase/fork and a MockLLM
-  with a finite pool, overflow and slot ops.
-- `tools/llama_patch/` (fork patch + build script; patched binaries in `~/llama.cpp/build/bin`,
-  unpatched in `build/bin-orig`) · `tools/observability/` (exporter + Prometheus + Grafana).
+  `base`, `base_fork`, decomposition cells) · `kvtrim.py` (selective KV: text spans -> token ranges,
+  `SelectiveKV` run by the agent during tool calls, runner `--selective kv|text`) · `selection.py`
+  (which observation sentences to delete: oracle/bm25/entity/recency). `llm.py` has slot
+  save/restore/erase/fork/trim and tokenize, and a MockLLM with a finite pool, overflow and slot ops.
+- `tools/llama_patch/` (fork + trim patches and build script; patched binaries in
+  `~/llama.cpp/build/bin`, local branch `edgeserve` in `~/llama.cpp`, unpatched in `build/bin-orig`) · `tools/observability/` (exporter + Prometheus + Grafana).
 - `bench/` (E0 runtime probes, microbenchmarks, slot offload bench, `x1_speed_tax.py`,
-  `x3_fork_check.py`), `analysis/` (aggregate, composition, kv_timeline, phase1_figures,
-  `check_kvm.py`, `obs_levels.py`), `costmodel/`, `tools/mem_aws.sh`.
+  `x3_fork_check.py`, `s1_trim_check.py`), `analysis/` (aggregate, composition, kv_timeline,
+  phase1_figures, `check_kvm.py`, `obs_levels.py`, `selective_quality.py`), `costmodel/`, `tools/mem_aws.sh`.
 - Tests: `uv run pytest` (mock LLM, no model). Mock end-to-end:
   `uv run python -m edgeserve.runner --workload workloads/smoke.json --k 2 --mock --out results/mock`.
 - `data/`, `models/`, `results/`, `.env`, `*.pem` are gitignored and rebuilt per machine.

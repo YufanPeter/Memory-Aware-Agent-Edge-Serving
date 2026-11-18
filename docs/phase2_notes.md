@@ -157,3 +157,38 @@ Findings:
   about 1.9% of a 20 ms step for S = 3k. Re-prefilling 3k tokens costs ~0.66 s, so the tax alone
   justifies dropping an agent only after ~30 s idle, far beyond a 0.8 s tool call. The tax matters
   for KV that stays: stale KV of finished tasks and anything that pins the top of the pool.
+
+### S1: in-place KV trim works (selective KV step 1, `bench/s1_trim_check.py`, 7B, `-c 32768`, 2026-11-18)
+
+Patched server (`tools/llama_patch/trim_slot.diff`: `seq_rm` + `seq_add` + cached-token update, the
+context-shift operations for arbitrary ranges). 20 react_long prompts from stage 1, cut after >= 2
+observations; deleted: non-supporting sentences of every observation except the latest (whole
+paragraphs with their title when no sentence is kept). Client alignment in `edgeserve/kvtrim.py`.
+
+| Check | Result |
+|---|---|
+| spans aligned to token boundaries | 92.7% (first version without snapping: 41%) |
+| prompts trimmed / tokens deleted | 20/20 / 28% of the prompt |
+| next request reuses the whole trimmed slot (cache_n = tokens - 1) | 100% |
+| KV cells in use after the trim = remaining tokens (memory freed) | 100% |
+| trim time (server) | 1.5 ms mean (save/restore of 3k tokens: 119 ms; re-prefill of 2k: 450 ms) |
+| fork safety: a second fork of the golden prefix after trimming a forked slot | full prefix reused, same output |
+
+Alignment: a sentence's leading space is often merged into the next word's token (`] Spyder`), and
+`.\n` is one token. Snapping the start onto a preceding space and taking whole lines (title +
+sentences + newline) fixes most cases; 16 spans still end inside a token and 11 were dropped because
+re-tokenizing the trimmed text differed at the junction (`plan_verified` drops only those spans).
+
+Outputs (greedy, 48 tokens) are coherent but differ from a fresh prefill of the trimmed text: A
+(trimmed in place) equals B (trimmed text prefilled from scratch) for 15% of prompts, while two fresh
+prefills of the same text (B, B2, different slots) agree for 70% (CUDA results depend on cell
+placement). A is often closer to C (untrimmed prompt) than to B: kept tokens were computed while
+attending to the deleted text, so some of its information stays in their KV. Whether this helps or
+hurts answers is measured with F1 in step 2. Note: deleting cells frees memory but does not shorten
+the attention span (cells do not move; see section 1).
+
+In the agent loop (`configs/sweeps/p2s_smoke.yaml`: 30 react_long dev questions, 131k, K = 8, oracle
+selection, trims during tool calls via `edgeserve/kvtrim.SelectiveKV`): 25 trims, 0 failures, 18.7k
+tokens deleted, 7 spans left in place. The request after a trim prefilled 903 tokens on average (the
+new observation only) with in-place deletion vs 1,598 with text-only deletion (re-prefill ~700
+tokens per trim). Step-2 results: `docs/phase2_ideas.md` §4.
