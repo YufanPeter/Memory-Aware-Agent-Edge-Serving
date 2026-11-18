@@ -138,11 +138,12 @@ def panels() -> list[dict]:
             target(f"rate(edgeserve_tasks_em_total{{{R}}}[30s]) * 60", "goodput (EM-correct)", "B")],
             8, y, 8, 8, overrides=[colour_override("throughput", "#5794f2"),
                                    colour_override("goodput (EM-correct)", "#73bf69")]),
-        ts_panel("Failures and slot operations (cumulative)", [
+        ts_panel("Failures, slot operations and selective KV (cumulative)", [
             target(f"edgeserve_requests_failed_total{{{R}}}", "failed requests"),
             target(f"edgeserve_tasks_failed_total{{{R}}}", "failed tasks", "B"),
             target(f"edgeserve_slot_ops_total{{{R}}}", "slot {{op}}", "C"),
-            target(f"edgeserve_compactions_total{{{R}}}", "compactions", "D")], 16, y, 8, 8, fill=0),
+            target(f"edgeserve_trims_total{{{R}}}", "selective KV trims", "D"),
+            target(f"edgeserve_trimmed_tokens_total{{{R}}} / 1000", "tokens trimmed (k)", "E")], 16, y, 8, 8, fill=0),
     ]
     y += 8
     hr = lambda q, h: f"histogram_quantile({q}, rate({h}_bucket{{{R}}}[30s]))"   # noqa: E731  (30 s window)
@@ -182,6 +183,22 @@ def panels() -> list[dict]:
     return [row] + p
 
 
+def run_variable(live: bool) -> dict:
+    """The $run variable; each selected run gets its own row.
+
+    Live: only runs the exporter reports right now (an instant query; a run's series go stale as
+    soon as the exporter moves to the next run), so the dashboard shows the current run, not every
+    run Prometheus has seen. Replay: every run Prometheus holds, to pick from."""
+    if live:
+        q, regex = "query_result(edgeserve_run_info)", '/run="([^"]+)"/'
+    else:
+        q, regex = "label_values(edgeserve_run_info, run)", ""
+    return {"name": "run", "label": "run", "type": "query", "datasource": DS,
+            "query": {"query": q, "refId": "run"}, "definition": q, "regex": regex,
+            "refresh": 2, "multi": True, "includeAll": True, "sort": 1,
+            "current": {"selected": True, "text": ["All"], "value": ["$__all"]}}
+
+
 def dashboard(uid: str, title: str, live: bool) -> dict:
     d = {
         "uid": uid, "title": title, "tags": ["edgeserve"], "schemaVersion": 39, "version": 1,
@@ -191,12 +208,7 @@ def dashboard(uid: str, title: str, live: bool) -> dict:
                 {"from": "2026-01-01T00:00:00.000Z", "to": "2026-01-01T00:08:00.000Z"},
         "refresh": "2s" if live else "",
         "timepicker": {"refresh_intervals": ["1s", "2s", "5s", "10s", "30s"]},
-        "templating": {"list": [{
-            "name": "run", "label": "run", "type": "query", "datasource": DS,
-            "query": {"query": "label_values(edgeserve_run_info, run)", "refId": "run"},
-            "definition": "label_values(edgeserve_run_info, run)",
-            "refresh": 2, "multi": True, "includeAll": True, "sort": 1,
-            "current": {"selected": True, "text": ["All"], "value": ["$__all"]}}]},
+        "templating": {"list": [run_variable(live)]},
         "annotations": {"list": []},
         "description": ("Live view of the run currently being written to results/ (exporter.py live)." if live else
                         "Replayed runs (exporter.py replay). Time axis = time since the run started, "

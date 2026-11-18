@@ -84,7 +84,8 @@ HELP = {
     "edgeserve_requests_total": ("counter", "LLM requests finished"),
     "edgeserve_requests_failed_total": ("counter", "LLM requests that failed (e.g. context overflow)"),
     "edgeserve_slot_ops_total": ("counter", "Slot save/restore/erase/fork operations"),
-    "edgeserve_compactions_total": ("counter", "Prompt compactions"),
+    "edgeserve_trims_total": ("counter", "Selective KV trims (observations processed during tool calls)"),
+    "edgeserve_trimmed_tokens_total": ("counter", "Tokens deleted from slots by selective KV (in place)"),
 }
 # Latency histograms: Grafana takes p50/p95 with histogram_quantile().
 HISTS = {
@@ -114,6 +115,25 @@ def server_ctx(run: Path) -> int | None:
         if flag in args:
             return int(args[args.index(flag) + 1])
     return None
+
+
+def runner_args(run: Path) -> dict[str, str]:
+    """Options of the edgeserve.runner process writing to `run` (Linux /proc), {} if none."""
+    target = run.resolve()
+    for proc in Path("/proc").iterdir():
+        if not proc.name.isdigit():
+            continue
+        try:
+            argv = (proc / "cmdline").read_bytes().decode(errors="replace").split("\0")
+            cwd = (proc / "cwd").resolve()
+        except OSError:
+            continue
+        if "edgeserve.runner" not in argv or "--out" not in argv:
+            continue
+        out = Path(argv[argv.index("--out") + 1])
+        if (out if out.is_absolute() else cwd / out).resolve() == target:
+            return {a: b for a, b in zip(argv, argv[1:]) if a.startswith("--") and not b.startswith("--")}
+    return {}
 
 
 def run_label(run: Path, results: Path | None = None) -> str:
@@ -147,12 +167,21 @@ class RunState:
         self.t_admit: dict[str, float] = {}
 
     def load_meta(self) -> None:
-        """Run labels from meta.json (the runner writes it when the run ends) and server_cmd.txt."""
+        """Run labels from meta.json (the runner writes it when the run ends), else from the
+        command line of the runner process still writing this run; pool size from server_cmd.txt."""
         f = self.run / "meta.json"
         meta = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
-        pol = meta.get("policy") or {}
-        self.info = {"run": self.label, "policy": str(pol.get("name", "?")), "k": str(meta.get("k", "?")),
-                     "workload": Path(str(meta.get("workload", "?"))).stem}
+        if meta:
+            pol = (meta.get("policy") or {}).get("name", "?")
+            sel = meta.get("selective") or {}
+            k, workload = meta.get("k", "?"), meta.get("workload", "?")
+            sel_tag = f"{sel['mechanism']}:{sel['scorer']}" if sel else ""
+        else:
+            a = runner_args(self.run)
+            pol, k, workload = a.get("--policy", "fixed_k" if a else "?"), a.get("--k", "?"), a.get("--workload", "?")
+            sel_tag = f"{a['--selective']}:{a.get('--sel-scorer', 'oracle')}" if a.get("--selective", "none") != "none" else ""
+        self.info = {"run": self.label, "policy": str(pol) + (f"+{sel_tag}" if sel_tag else ""), "k": str(k),
+                     "workload": Path(str(workload)).stem}
         self.budget = server_ctx(self.run) or meta.get("pool_tokens") or 0
 
     # --- events -------------------------------------------------------------------------------
@@ -240,8 +269,12 @@ class RunState:
                 self.resident = int(ev["resident"])
         elif kind == "slot_op":
             self.slot_ops[str(ev.get("op"))] += 1
-        elif kind == "compact":
-            self.counters["compactions"] += 1
+        elif kind == "trim":
+            self.counters["trims"] += 1
+            n = int(ev.get("tokens") or 0)
+            self.counters["trimmed_tokens"] += n
+            if slot is not None and not self.managed and n:     # managed runs: kv_state carries it
+                self.slot_tokens[slot] = max(0, self.slot_tokens[slot] - n)
         elif kind == "sample":
             self.sample = {k: float(v) for k, v in ev.items() if isinstance(v, (int, float)) and k != "t"}
 
@@ -297,7 +330,8 @@ class RunState:
                 ("edgeserve_requests_inflight", run, float(self.inflight)),
                 ("edgeserve_requests_total", run, self.counters["requests"]),
                 ("edgeserve_requests_failed_total", run, self.counters["requests_failed"]),
-                ("edgeserve_compactions_total", run, self.counters["compactions"])]
+                ("edgeserve_trims_total", run, self.counters["trims"]),
+                ("edgeserve_trimmed_tokens_total", run, self.counters["trimmed_tokens"])]
         out += [("edgeserve_slot_ops_total", {**run, "op": op}, float(n)) for op, n in self.slot_ops.items()]
         for name, (_, bounds) in HISTS.items():
             h = self.hist[name]
@@ -347,6 +381,8 @@ class Live:
         self.path: Path | None = None
         self.offset = 0
         self.buf = ""
+        self.meta_checked = 0.0
+        self.meta_final = False
 
     def newest(self) -> Path | None:
         files = list(self.results.glob("**/events.jsonl"))
@@ -359,13 +395,17 @@ class Live:
         if cur != self.path:
             with self.lock:
                 self.path, self.offset, self.buf = cur, 0, ""
+                self.meta_checked, self.meta_final = 0.0, False
                 self.state = RunState(cur.parent, run_label(cur.parent, self.results))
             print(f"following {cur}", flush=True)
         with open(self.path, encoding="utf-8") as f:
             f.seek(self.offset)
             chunk = f.read()
             self.offset = f.tell()
-        if self.state.info["policy"] == "?" and (self.path.parent / "meta.json").exists():
+        now = time.monotonic()
+        if (self.state.info["policy"] == "?" or not self.meta_final) and now - self.meta_checked > 5:
+            self.meta_checked = now      # until meta.json exists: retry from the runner's command line
+            self.meta_final = (self.path.parent / "meta.json").exists()
             with self.lock:
                 self.state.load_meta()
         if not chunk:

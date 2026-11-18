@@ -38,6 +38,7 @@
      "refId": "run"
     },
     "definition": "label_values(edgeserve_run_info, run)",
+    "regex": "",
     "refresh": 2,
     "multi": true,
     "includeAll": true,
@@ -1357,7 +1358,7 @@
   },
   {
    "type": "timeseries",
-   "title": "Failures and slot operations (cumulative)",
+   "title": "Failures, slot operations and selective KV (cumulative)",
    "description": "",
    "datasource": {
     "type": "prometheus",
@@ -1405,9 +1406,19 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "edgeserve_compactions_total{run=~\"$run\"}",
-     "legendFormat": "compactions",
+     "expr": "edgeserve_trims_total{run=~\"$run\"}",
+     "legendFormat": "selective KV trims",
      "refId": "D",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "edgeserve_trimmed_tokens_total{run=~\"$run\"} / 1000",
+     "legendFormat": "tokens trimmed (k)",
+     "refId": "E",
      "range": true
     }
    ],
