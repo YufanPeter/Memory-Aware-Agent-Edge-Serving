@@ -1,4 +1,4 @@
-"""Tables for the Phase 2 report (T1-T6) and a data check, from results/runs.csv (run
+"""Tables for the Phase 2 report (T1-T7) and a data check, from results/runs.csv (run
 analysis.aggregate first) and the run directories. Every table is built from whatever runs exist:
 a table whose sweep has no runs yet becomes a one-line note, so the script can run at any point of
 the schedule and simply picks up new runs.
@@ -19,13 +19,18 @@ Metric rules (fixed before the main runs, docs/phase2_spec.md §8.2):
   (margin 0.05) over the questions answered in every run on both sides.
 - Tuning runs (perf split) only justify the picks: no delta is computed from them. The dev 2x2
   uses the knob the perf rule chose, never a pick re-made on dev.
+- Decision rule for a goodput effect: supported (S) only if Welch p < 0.05 and the steady
+  bootstrap 95% CI excludes 0, else not established (n.e.). Quality: paired F1 TOST, margin 0.05
+  on dev and 0.03 on test-500 (spec §8.2).
 - One estimator per metric across all runs: recompute tokens from the traces, give-ups from the
   manager's per-task counters (not its eviction-op counts).
 
 Sweeps: perf tuning (e2_budget, e2_budget_k, p0_baselines, p0x4_tune, p2_tune), dev main
-(p2_main, plus c8k_d1_b2_k2 from p2_ablate), ablations and the 131k check (p2_ablate), dev 2x2
-(p2_2x2). g0_shakedown is validation, never a result. The first adm_retain points of p2_tune
-(c16k_d4_admret_w*, before the active-gate fix) are excluded; their fix is c16k_d4_admret_v2_w*.
+(p2_main, plus c8k_d1_b2_k2 and c16k_d1_b1_k5 from p2_ablate), ablations and the 131k check
+(p2_ablate), dev 2x2 at 16k x4 and 8k x1 (p2_2x2), held-out test confirmation (p2_test,
+test_long_500). g0_shakedown is validation, never a result. The first adm_retain points of
+p2_tune at 16k x4 (c16k_d4_admret_w*, before the active-gate fix) are excluded; their fix is
+c16k_d4_admret_v2_w*. The 8k x1 adm_retain points (c8k_d1_admret_w*) ran on the fixed code.
 """
 from __future__ import annotations
 
@@ -42,18 +47,22 @@ from typing import Any
 from analysis import aggregate, stats
 
 TUNING = ("e2_budget", "e2_budget_k", "p0_baselines", "p0x4_tune", "p2_tune")
-MAIN, ABLATE, TWO = "p2_main", "p2_ablate", "p2_2x2"
-REPORTED = (MAIN, ABLATE, TWO)
+MAIN, ABLATE, TWO, TEST = "p2_main", "p2_ablate", "p2_2x2", "p2_test"
+REPORTED = (MAIN, ABLATE, TWO, TEST)
 # Main-table cells that ran with the ablations: B2 at 8k x1 and B1's perf top-goodput K at 16k x1.
 MAIN_EXTRA = {(ABLATE, "c8k_d1_b2_k2"), (ABLATE, "c16k_d1_b1_k5")}
-EXCLUDE = (("p2_tune", re.compile(r"_admret_w")),)  # adm_retain before the active-gate fix
+# adm_retain at 16k x4 before the active-gate fix (the 8k x1 adm_retain points ran after it)
+EXCLUDE = (("p2_tune", re.compile(r"^c16k_d4_admret_w")),)
 SPLIT = {"p1_long_200": "perf", "dev_long_200": "dev", "test_long_500": "test"}
 MAIN_CELLS = ((16384, 4.0), (8192, 1.0), (16384, 1.0), (32768, 4.0))
 HEAD = (16384, 4.0)
+TWO_POINTS = (HEAD, (8192, 1.0))   # the 2x2 points, in report order (ablations: HEAD only)
 FIXED_K = ("B1", "B2", "B3", "unpinned", "gated_k", "managed_k")
 CFG_ORDER = ("B1", "B2", "B3", "gated_k", "managed_k", "adm_retain", "ours", "ours_h0")
 COMPLETION_MIN = 0.95
 F1_MARGIN = 0.05
+TEST_F1_MARGIN = 0.03   # pre-registered for test-500 (spec §8.2): ±0.023 CI half-width at n = 500
+ALPHA = 0.05
 HOST_BYTES_PER_TOKEN = 57_360   # B2's matched host tier h·c with h = 1 (configs/sweeps/p0x4_tune.yaml)
 METRICS = ("completion", "goodput", "throughput", "steady_thr", "steady_good", "em", "f1", "agents",
            "give_ups", "give_offload", "give_drop", "give_erase", "ops_offload", "ops_drop", "ops_erase",
@@ -68,7 +77,8 @@ GIVE_NOTE = ("Give-ups = give-up events (one per task and idle period, so a drop
              "(tasks.jsonl); – = no manager in the run.")
 RECOMPUTE_NOTE = ("Recompute = re-prefilled tokens per task: for each pair of consecutive requests of a task, "
                   "the cells held after the first minus the next one's cache_n, from the traces. One "
-                  "estimator for every run (it equals the manager's own count wherever there is one).")
+                  "estimator for every run (no Phase 2 run compacts prompts with TRIM, so on these runs it "
+                  "equals the manager's own count wherever there is one).")
 SMALL_N = "n runs per side is small, so p is only indicative"
 
 Run = dict[str, Any]
@@ -292,6 +302,16 @@ def f1_tost(base_dirs: list[Path], new_dirs: list[Path], margin: float = F1_MARG
                                                 stats.per_question(new_dirs, only=only)), margin)
 
 
+def verdict(d: dict[str, Any], ci: dict[str, Any] | None) -> str:
+    """The report's decision rule for a goodput effect: supported (S) only if Welch p < 0.05 on
+    per-run overall goodput and the steady bootstrap 95% CI excludes 0; otherwise not
+    established (n.e.), including when either test cannot be run (one run a side)."""
+    if d.get("p") is None or ci is None:
+        return "n.e."
+    lo, hi = ci["ci"]
+    return "S" if d["p"] < ALPHA and (lo > 0 or hi < 0) else "n.e."
+
+
 # --- formatting ------------------------------------------------------------------------
 
 def fmt(c: Cell | None, m: str, digits: int = 1, scale: float = 1.0) -> str:
@@ -312,9 +332,16 @@ def sig(v: float | None, digits: int = 1, plus: bool = True) -> str:
 
 
 def pval(d: dict[str, Any]) -> str:
+    """Two decimals; below 0.005, where that would print 0.00, three (or < 0.001)."""
     if d.get("p") is None:
         return f"– (n {d['n'][0]}/{d['n'][1]})"
-    return f"{d['p']:.2f} (n {d['n'][0]}/{d['n'][1]})"
+    p = d["p"]
+    s = f"{p:.2f}" if p >= 0.005 else f"{p:.3f}" if p >= 0.001 else "<0.001"
+    return f"{s} (n {d['n'][0]}/{d['n'][1]})"
+
+
+def ci_cell(ci: dict[str, Any] | None) -> str:
+    return f"{ci['delta']:+.2f} [{ci['ci'][0]:+.2f}, {ci['ci'][1]:+.2f}]" if ci else "–"
 
 
 def by_action(c: Cell, prefix: str) -> str | None:
@@ -444,13 +471,26 @@ def t2(cells: dict[Any, Cell]) -> str:
             + table(head, rows))
 
 
-def main_cells(runs: list[Run]) -> dict[tuple[int, float], list[Cell]]:
-    """The dev main table's cells per budget × delay: p2_main plus MAIN_EXTRA."""
-    rs = [r for r in runs if r["sweep"] == MAIN or (r["sweep"], r["point"]) in MAIN_EXTRA]
+def point_cells(rs: list[Run]) -> dict[tuple[int, float], list[Cell]]:
+    """Cells per budget × delay, one per point name, in configuration order."""
     out: dict[tuple[int, float], list[Cell]] = {}
     for c in group(rs, lambda r: (r["ctx"], r["delay"], r["point"])).values():
         out.setdefault((c["ctx"], c["delay"]), []).append(c)
     return {b: sorted(cs, key=order) for b, cs in out.items()}
+
+
+def main_cells(runs: list[Run]) -> dict[tuple[int, float], list[Cell]]:
+    """The dev main table's cells per budget × delay: p2_main plus MAIN_EXTRA."""
+    return point_cells([r for r in runs if r["sweep"] == MAIN or (r["sweep"], r["point"]) in MAIN_EXTRA])
+
+
+def test_cells(runs: list[Run]) -> dict[tuple[int, float], list[Cell]]:
+    """The held-out test confirmation's cells per budget × delay (p2_test, test split only)."""
+    return point_cells([r for r in runs if r["sweep"] == TEST and r["split"] == "test"])
+
+
+def point_order(b: tuple[int, float]) -> tuple[int, tuple[int, float]]:
+    return (MAIN_CELLS.index(b) if b in MAIN_CELLS else 99, b)
 
 
 METRIC_HEAD = ["config", "knob", "reps", "completion %", "failures", "goodput", "throughput", "steady thr.", "EM",
@@ -480,8 +520,7 @@ def comparisons(cs: list[Cell], n_boot: int) -> list[list[Any]]:
             a, b = [r["dir"] for r in base["runs"]], [r["dir"] for r in new["runs"]]
             q, q0 = (f1_tost(a, b), f1_tost(a, b, answered=False)) if base["cfg"] == "B1" else (None, None)
             rows.append([new["cfg"], f"{base['cfg']} {knob(base)}", sig(d["goodput_pct"]), sig(d["completion_pp"]),
-                         pval(d), f"{ci['delta']:+.2f} [{ci['ci'][0]:+.2f}, {ci['ci'][1]:+.2f}]" if ci else "–",
-                         tost_cell(q), tost_cell(q0, verdict=False)])
+                         pval(d), ci_cell(ci), tost_cell(q), tost_cell(q0, verdict=False)])
     for base in (c for c in bases if c["cfg"] == "B1" and c["n"] >= 2):
         a, b = [base["runs"][0]["dir"]], [base["runs"][1]["dir"]]
         rows.append([f"{base['cfg']} {knob(base)} {base['runs'][1]['rep']}", base["runs"][0]["rep"] + " (null)",
@@ -489,13 +528,19 @@ def comparisons(cs: list[Cell], n_boot: int) -> list[list[Any]]:
     return rows
 
 
-def tost_cell(q: dict[str, Any] | None, verdict: bool = True) -> str:
+def tost_cell(q: dict[str, Any] | None, verdict: bool = True, margins: tuple[float, ...] | None = None) -> str:
     """Mean ΔF1 and its 90% CI, with the number of paired questions; the verdict only where the
-    test is the pre-registered one (answered in every run)."""
+    test is the pre-registered one (answered in every run). With margins (strict first), the
+    verdict names the tightest margin the CI fits in: "eq." at the first, "eq. ±m only" at a
+    looser one, "not eq." at none."""
     if not q or q.get("equivalent") is None:
         return "–"
-    s = f"{q['mean']:+.3f} [{q['ci90'][0]:+.3f}, {q['ci90'][1]:+.3f}]"
-    if verdict:
+    lo, hi = q["ci90"]
+    s = f"{q['mean']:+.3f} [{lo:+.3f}, {hi:+.3f}]"
+    if margins:
+        inside = [m for m in margins if -m < lo and hi < m]
+        s += " eq." if margins[0] in inside else f" eq. ±{inside[0]:g} only" if inside else " not eq."
+    elif verdict:
         s += f" {'eq.' if q['equivalent'] else 'not eq.'}"
     return s + f" (n {q['n']})"
 
@@ -527,26 +572,49 @@ def t3(runs: list[Run], tuned_b1: dict[tuple[int, float], tuple[Cell | None, Cel
     return "\n\n".join(parts)
 
 
-def two_by_two(cells: dict[str, Cell | None]) -> list[list[Any]]:
+GATE_EFFECTS = (("gate, same K", "B1 same K", "gated_k"),
+                ("gate, K re-tuned", "B1★", "gated_k"))
+CLAIM = ("ours vs gated_k", "gated_k", "ours")
+EFFECT_HEAD = ["effect", "cells", "Δ goodput", "Δ %", "Δ completion pp", "Welch p (n)", "steady Δ goodput [95% CI]",
+               "ΔF1 answered [90% CI] (n q)", "verdict", "note"]
+
+
+def two_by_two(cells: dict[str, Cell | None], n_boot: int = 0, names: dict[str, str] | None = None,
+               notes: dict[str, str] | None = None) -> list[list[Any]]:
+    """One row per effect, new − base: Δ goodput (abs, %), Δ completion, Welch p, the steady
+    bootstrap CI, paired F1 TOST (dev margin) and the S / n.e. verdict. cells holds the 2×2
+    cells by configuration, plus "B1 same K" (B1 at gated_k's K) and "B1★" (B1's perf pick) for
+    the gate rows; names maps a key to its label where they differ (B1's ★/† marks)."""
+    names, notes = names or {}, notes or {}
     rows = []
-    for name, a, b in EFFECTS:
+    for name, a, b in (*GATE_EFFECTS, *EFFECTS, CLAIM):
         ca, cb = cells.get(a), cells.get(b)
+        na, nb = names.get(a, a), names.get(b, b)
         if ca is None or cb is None:
-            rows.append([name, f"{b} − {a}", "–", "–", "–", "–", f"missing: {', '.join(x for x, c in ((a, ca), (b, cb)) if c is None)}"])
+            rows.append([name, f"{nb} − {na}", "–", "–", "–", "–", "–", "–", "–",
+                         f"missing: {', '.join(x for x, c in ((na, ca), (nb, cb)) if c is None)}"])
             continue
         d = delta(ca, cb)
-        rows.append([name, f"{b} ({knob(cb)}) − {a} ({knob(ca)})", sig(d["goodput"], 2), sig(d["goodput_pct"]),
-                     sig(d["completion_pp"]), pval(d), ""])
+        ci = steady_ci(ca, cb, n_boot)
+        q = f1_tost([r["dir"] for r in ca["runs"]], [r["dir"] for r in cb["runs"]])
+        rows.append([name, f"{nb} ({knob(cb)}) − {na} ({knob(ca)})", sig(d["goodput"], 2), sig(d["goodput_pct"]),
+                     sig(d["completion_pp"]), pval(d), ci_cell(ci), tost_cell(q), verdict(d, ci), notes.get(name, "")])
     return rows
 
 
 TWO_CELLS = ("gated_k", "managed_k", "adm_retain")
 
 
-def perf_2x2(cells: dict[Any, Cell]) -> dict[str, list[Cell]]:
-    """The perf tuning's knobs at the headline point, per 2×2 cell (B1 and ours for reference)."""
-    head = [c for c in cells.values() if (c["ctx"], c["delay"]) == HEAD]
-    return {cfg: sorted((c for c in head if c["cfg"] == cfg), key=order) for cfg in ("B1", *TWO_CELLS, "ours")}
+def perf_2x2(cells: dict[Any, Cell], point: tuple[int, float] = HEAD) -> dict[str, list[Cell]]:
+    """The perf tuning's knobs at one 2×2 point, per 2×2 cell (B1 and ours for reference)."""
+    at = [c for c in cells.values() if (c["ctx"], c["delay"]) == point]
+    return {cfg: sorted((c for c in at if c["cfg"] == cfg), key=order) for cfg in ("B1", *TWO_CELLS, "ours")}
+
+
+def sched(perf: dict[str, list[Cell]]) -> Cell | None:
+    """`sched`, the pre-registered scheduling-only reference of the lifecycle claim (spec §8.1):
+    the better of gated_k and adm_retain on perf, each at its own pick, by the same tuning rule."""
+    return pick([p for cfg in ("gated_k", "adm_retain") if (p := pick(perf[cfg])) is not None])
 
 
 def knob_value(c: Cell) -> Any:
@@ -555,75 +623,113 @@ def knob_value(c: Cell) -> Any:
 
 
 # Knobs fixed from the perf tuning before the dev 2x2 ran, where the goodput rule's pick is a tie.
-DEV_KNOB = {"managed_k": 8}
-DEV_KNOB_WHY = {"managed_k": "on perf K=8 and K=10 tie on goodput (11.68 vs 11.69), and K=8 had the higher "
-                             "throughput (26.3 vs 25.1 tasks/min), so K=8 was chosen before the dev runs."}
+DEV_KNOB = {HEAD: {"managed_k": 8}}
+DEV_KNOB_WHY = {HEAD: {"managed_k": "on perf K=8 and K=10 tie on goodput (11.68 vs 11.69), and K=8 had the higher "
+                                    "throughput (26.3 vs 25.1 tasks/min), so K=8 was chosen before the dev runs."}}
 
 
-def dev_2x2(runs: list[Run], cells: dict[Any, Cell]) -> tuple[dict[str, Cell | None], list[str]]:
-    """The dev 2×2 cells at the knob the perf tuning chose, never re-picked on dev: choosing on
-    the evaluation split would bias the decomposition deltas. Notes for knobs that are missing
-    on dev or that dev ran but the perf rule did not choose."""
-    dev = [r for r in runs if r["sweep"] == TWO and (r["ctx"], r["delay"]) == HEAD]
+def dev_2x2(runs: list[Run], cells: dict[Any, Cell],
+            point: tuple[int, float] = HEAD) -> tuple[dict[str, Cell | None], list[str]]:
+    """The dev 2×2 cells at one point, at the knob the perf tuning chose there, never re-picked
+    on dev: choosing on the evaluation split would bias the decomposition deltas. Notes for knobs
+    that are missing on dev or that dev ran but the perf rule did not choose."""
+    dev = [r for r in runs if r["sweep"] == TWO and (r["ctx"], r["delay"]) == point]
     if not dev:
         return {}, []
     two = list(group(dev, lambda r: r["point"]).values())
-    perf = perf_2x2(cells)
+    perf = perf_2x2(cells, point)
+    fixed, why = DEV_KNOB.get(point, {}), DEV_KNOB_WHY.get(point, {})
+    at = f"Dev 2×2 at {budget(*point)}"
     chosen: dict[str, Cell | None] = {}
     notes = []
     for cfg in TWO_CELLS:
         p = pick(perf[cfg])
-        if cfg in DEV_KNOB and p is not None:   # a tie the rule breaks by noise; decided on perf, before dev
-            p = next((c for c in perf[cfg] if knob_value(c) == DEV_KNOB[cfg]), p)
-            notes.append(f"Dev 2×2 {cfg}: {knob(p)} is used; {DEV_KNOB_WHY[cfg]}")
+        if cfg in fixed and p is not None:   # a tie the rule breaks by noise; decided on perf, before dev
+            p = next((c for c in perf[cfg] if knob_value(c) == fixed[cfg]), p)
+            notes.append(f"{at}, {cfg}: {knob(p)} is used; {why[cfg]}")
         have = [c for c in two if c["cfg"] == cfg]
         chosen[cfg] = next((c for c in have if p and knob_value(c) == knob_value(p)), None)
         if p is None and have:
-            notes.append(f"Dev 2×2 {cfg} ran ({', '.join(knob(c) for c in have)}) but the perf tuning has no "
+            notes.append(f"{at}, {cfg} ran ({', '.join(knob(c) for c in have)}) but the perf tuning has no "
                          f"{cfg} pick, so it is not used.")
         elif p is not None and chosen[cfg] is None:
-            notes.append(f"Dev 2×2 {cfg}: the perf tuning picks {knob(p)}, which p2_2x2 has not run"
+            notes.append(f"{at}, {cfg}: the perf tuning picks {knob(p)}, which p2_2x2 has not run"
                          + (f" (it has {', '.join(knob(c) for c in have)})" if have else "") + ".")
         elif p is not None:
             extra = [knob(c) for c in have if c is not chosen[cfg]]
             if extra:
-                notes.append(f"Dev 2×2 {cfg}: also ran {', '.join(extra)}; only the perf pick {knob(p)} is used.")
+                notes.append(f"{at}, {cfg}: also ran {', '.join(extra)}; only the perf pick {knob(p)} is used.")
     return chosen, notes
 
 
-def t4(runs: list[Run], cells: dict[Any, Cell]) -> str:
-    parts = [("**T4. 2×2 decomposition at 16k ×4.** Lifecycle effect = managed − llama.cpp lifecycle, at "
+def effect_cells(runs: list[Run], cells: dict[Any, Cell],
+                 point: tuple[int, float]) -> tuple[dict[str, Cell | None], dict[str, str], dict[str, str]]:
+    """Everything the effects table of one 2×2 point needs: the dev cells (p2_2x2 at the perf
+    knobs; ours and B1 from p2_main), their labels, and the note on the pre-registered claim."""
+    chosen, _ = dev_2x2(runs, cells, point)
+    if not chosen:
+        return {}, {}, {}
+    main = main_cells(runs).get(point, [])
+    tuned = picks(cells, "B1")
+    p, _ = tuned.get(point, (None, None))
+    b1s = [c for c in main if c["cfg"] == "B1"]
+    g = chosen.get("gated_k")
+    out = {**chosen, "ours": next((c for c in main if c["cfg"] == "ours"), None),
+           "B1 same K": next((c for c in b1s if g and c["k"] == g["k"]), None),
+           "B1★": next((c for c in b1s if p and c["k"] == p["k"]), None)}
+    names = {k: "B1" + b1_mark(c, tuned) for k in ("B1 same K", "B1★") if (c := out[k])}
+    perf = perf_2x2(cells, point)
+    s, notes = sched(perf), {}
+    if s is not None:
+        other = pick(perf["adm_retain" if s["cfg"] == "gated_k" else "gated_k"])
+        vs = f" vs {other['cfg']} {other['goodput']:.2f}" if other else ""
+        notes[CLAIM[0]] = (f"pre-registered lifecycle claim: gated_k is sched, the better scheduling-only cell on "
+                           f"perf ({s['goodput']:.2f}{vs})" if s["cfg"] == "gated_k" else
+                           f"not the pre-registered claim here: sched on perf is {s['cfg']} ({s['goodput']:.2f}{vs}), "
+                           f"so ours vs sched is the lifecycle at KV admission row")
+    return out, names, notes
+
+
+def t4(runs: list[Run], cells: dict[Any, Cell], n_boot: int = 0) -> str:
+    parts = [("**T4. 2×2 decomposition at 16k ×4 and 8k ×1.** Lifecycle effect = managed − llama.cpp lifecycle, at "
              "fixed K and at KV admission; admission effect = KV admission − fixed K, under each lifecycle. "
-             "Δ goodput in correct tasks/min and %, Δ completion in pp. B1 (no gate) is shown for reference. "
-             "Effects are reported only from the dev reps, at the knob the perf tuning chose (spec §8.1).")]
-    cand = perf_2x2(cells)
-    if any(cand[x] for x in TWO_CELLS):
-        rows = []
-        for cfg, cs in cand.items():
-            p = pick(cs)
-            for c in cs:
-                rows.append([cfg + (star(c) if c is p else ""), knob(c), fmt(c, "completion", 1, 100),
-                             fmt(c, "goodput", 2), fmt(c, "throughput"), fmt(c, "agents"), fmt(c, "purges", 0),
-                             fmt(c, "recompute", 0), fmt(c, "op_share", 1, 100)])
-        parts.append("*Selection runs (perf, 1 rep per knob), not results: ★ = the tuning rule's pick per cell "
-                     "(★⁻ = fallback, nothing completes ≥ 95%). No effects are computed from these runs, since "
-                     "the picks were made on them.*\n\n"
-                     + table(["cell", "knob", "completion %", "goodput", "throughput", "agents", "purges",
-                              "recompute tok/task", "op time %"], rows))
-    else:
-        parts.append("_No perf 2×2 tuning runs yet._")
-    chosen, _ = dev_2x2(runs, cells)
-    if chosen:
-        main = main_cells(runs).get(HEAD, [])
-        chosen["ours"] = next((c for c in main if c["cfg"] == "ours"), None)
-        rows = [metric_row(c) for c in [*[c for c in main if c["cfg"] == "B1"],
-                                        *(chosen[x] for x in (*TWO_CELLS, "ours"))] if c]
-        parts.append("*Dev reps (p2_2x2 at the perf-chosen knobs; ours and B1 from p2_main). Welch p: "
-                     + SMALL_N + ".*\n\n" + table(METRIC_HEAD, rows))
-        parts.append(table(["effect", "cells", "Δ goodput", "Δ %", "Δ completion pp", "Welch p (n)", "note"],
-                           two_by_two(chosen)))
-    else:
-        parts.append("_Dev 2×2 reps (p2_2x2): not run yet._")
+             "Gate effect = gated_k − B1: at the same K (the active gate alone), and against B1★ (the gate plus "
+             "the higher K that completing every task lets the tuning rule choose). Ours vs gated_k is the "
+             "pre-registered lifecycle claim where gated_k is `sched`, the better scheduling-only cell on perf "
+             "(spec §8.1). Δ goodput in correct tasks/min and %, Δ completion in pp. B1 (no gate) is shown for "
+             "reference. Effects are reported only from the dev reps, at the knob the perf tuning chose (spec §8.1). "
+             "Steady Δ goodput (tasks/min) with its hierarchical bootstrap 95% CI. ΔF1 = paired per-question F1, "
+             "new − base, mean and 90% CI over the n questions answered in every run on both sides; equivalent "
+             f"if inside ±{F1_MARGIN} (TOST). Verdict: S (supported) only if Welch p < {ALPHA} and the steady CI "
+             "excludes 0, else n.e. (not established).")]
+    for b in TWO_POINTS:
+        parts.append(f"*{budget(*b)}*")
+        cand = perf_2x2(cells, b)
+        if any(cand[x] for x in TWO_CELLS):
+            rows = []
+            for cfg, cs in cand.items():
+                p = pick(cs)
+                for c in cs:
+                    rows.append([cfg + (star(c) if c is p else ""), knob(c), fmt(c, "completion", 1, 100),
+                                 fmt(c, "goodput", 2), fmt(c, "throughput"), fmt(c, "agents"), fmt(c, "purges", 0),
+                                 fmt(c, "recompute", 0), fmt(c, "op_share", 1, 100)])
+            parts.append("*Selection runs (perf, 1 rep per knob), not results: ★ = the tuning rule's pick per cell "
+                         "(★⁻ = fallback, nothing completes ≥ 95%). No effects are computed from these runs, since "
+                         "the picks were made on them.*\n\n"
+                         + table(["cell", "knob", "completion %", "goodput", "throughput", "agents", "purges",
+                                  "recompute tok/task", "op time %"], rows))
+        else:
+            parts.append("_No perf 2×2 tuning runs yet._")
+        two, names, notes = effect_cells(runs, cells, b)
+        if two:
+            main = main_cells(runs).get(b, [])
+            rows = [metric_row(c) for c in [*[c for c in main if c["cfg"] == "B1"],
+                                            *(two[x] for x in (*TWO_CELLS, "ours"))] if c]
+            parts.append("*Dev reps (p2_2x2 at the perf-chosen knobs; ours and B1 from p2_main). Welch p: "
+                         + SMALL_N + ".*\n\n" + table(METRIC_HEAD, rows))
+            parts.append(table(EFFECT_HEAD, two_by_two(two, n_boot, names, notes)))
+        else:
+            parts.append("_Dev 2×2 reps (p2_2x2): not run yet._")
     return "\n\n".join(parts)
 
 
@@ -684,9 +790,59 @@ def t6(runs: list[Run]) -> str:
     return "\n\n".join(parts)
 
 
+TEST_MARGINS = (TEST_F1_MARGIN, F1_MARGIN)
+
+
+def test_comparisons(cs: list[Cell], n_boot: int) -> list[list[Any]]:
+    """Ours vs every other row of one test point, with the verdict; then the B1 rep1-vs-rep0
+    F1 null, which must pass the same margin."""
+    rows = []
+    for new in (c for c in cs if c["cfg"] == "ours"):
+        for base in (c for c in cs if c["cfg"] != "ours"):
+            d = delta(base, new)
+            ci = steady_ci(base, new, n_boot)
+            q = f1_tost([r["dir"] for r in base["runs"]], [r["dir"] for r in new["runs"]], TEST_F1_MARGIN)
+            rows.append([new["cfg"], f"{base['cfg']} {knob(base)}", sig(d["goodput_pct"]), sig(d["completion_pp"]),
+                         pval(d), ci_cell(ci), tost_cell(q, margins=TEST_MARGINS), verdict(d, ci)])
+    for base in (c for c in cs if c["cfg"] == "B1" and c["n"] >= 2):
+        a, b = [base["runs"][0]["dir"]], [base["runs"][1]["dir"]]
+        rows.append([f"B1 {knob(base)} {base['runs'][1]['rep']}", base["runs"][0]["rep"] + " (null)", "", "", "", "",
+                     tost_cell(f1_tost(a, b, TEST_F1_MARGIN), margins=TEST_MARGINS), ""])
+    return rows
+
+
+def t7(runs: list[Run], tuned_b1: dict[tuple[int, float], tuple[Cell | None, Cell | None]], n_boot: int) -> str:
+    cells = test_cells(runs)
+    if not cells:
+        return "_T7: no p2_test runs yet._"
+    n_tasks = sorted({int(num(r, "n_tasks") or 0) for cs in cells.values() for c in cs for r in c["runs"]})
+    reps = sorted({c["n"] for cs in cells.values() for c in cs})
+    wl = sorted({r.get("workload") or "" for cs in cells.values() for c in cs for r in c["runs"]})
+    parts = [(f"**T7. Held-out test split ({', '.join(wl)}; {'/'.join(map(str, n_tasks))} tasks per run, "
+              f"{'/'.join(map(str, reps))} reps).** Confirmation of the headline points with every knob frozen from "
+              "the perf tuning (nothing is tuned or re-picked on test); same columns as T3. B1 ★ = the perf "
+              "tuning's pick (★⁻ = fallback), † = its highest-goodput K. " + GIVE_NOTE + " " + RECOMPUTE_NOTE
+              + " Ours vs each row: Δ overall goodput % and Δ completion (pp); Welch p on per-run overall goodput "
+              "(" + SMALL_N + "); steady Δ goodput (tasks/min) with its hierarchical bootstrap 95% CI. ΔF1 = paired "
+              "per-question F1, ours − row, mean and 90% CI over the n questions answered in every run on both "
+              f"sides, against every row. The margin pre-registered for test-500 is ±{TEST_F1_MARGIN} (spec §8.2): "
+              f"eq. = inside ±{TEST_F1_MARGIN}; eq. ±{F1_MARGIN:g} only = inside the dev margin but not the test "
+              f"one. The null row is B1 rep1 vs rep0, paired the same way. Verdict (goodput): S only if Welch p < "
+              f"{ALPHA} and the steady CI excludes 0, else n.e.")]
+    for b in sorted(cells, key=point_order):
+        cs = cells[b]
+        rows = [metric_row(c, c["cfg"] + (b1_mark(c, tuned_b1) if c["cfg"] == "B1" else "")) for c in cs]
+        parts.append(f"*{budget(*b)}*\n\n" + table(METRIC_HEAD, rows))
+        comp = test_comparisons(cs, n_boot)
+        if comp:
+            parts.append(table(["config", "vs", "Δ goodput %", "Δ completion pp", "Welch p (n)",
+                                "steady Δ goodput [95% CI]", "ΔF1 answered [90% CI] (n q)", "verdict"], comp))
+    return "\n\n".join(parts)
+
+
 # --- data check ------------------------------------------------------------------------
 
-def expected_reps(sweeps: tuple[str, ...] = (MAIN, ABLATE, TWO, "p2_tune")) -> dict[tuple[str, str], int]:
+def expected_reps(sweeps: tuple[str, ...] = (MAIN, ABLATE, TWO, TEST, "p2_tune")) -> dict[tuple[str, str], int]:
     """Points and reps each sweep config asks for. Several files may share a sweep name
     (p2_tune_v2 adds to p2_tune), so they are merged."""
     import yaml
@@ -735,19 +891,24 @@ def data_notes(runs: list[Run], dropped: list[dict[str, Any]], cells: dict[Any, 
             if p is not None and not meets_floor(p):
                 notes.append(f"No {cfg} knob reaches {COMPLETION_MIN:.0%} completion at {budget(*b)} (perf); the pick "
                              f"({star(p)}) is the highest-completion knob, {knob(p)} at {100 * p['completion']:.1f}%.")
-    notes += dev_2x2(runs, cells)[1]
+    for b in TWO_POINTS:
+        notes += dev_2x2(runs, cells, b)[1]
     tuned = picks(cells, "B1")
-    for b, cs in main_cells(runs).items():
-        p, t = tuned.get(b, (None, None))
-        ks = sorted(c["k"] for c in cs if c["cfg"] == "B1")
-        want_k = sorted({c["k"] for c in (p, t) if c})
-        if ks and want_k and ks != want_k:
-            notes.append(f"B1 K in the main table at {budget(*b)} is {ks}; the perf tuning rule gives "
-                         f"pick K={p['k'] if p else '–'} and top K={t['k'] if t else '–'}.")
-        po = pick(by_budget(cells, "ours").get(b, []))
-        for c in cs:
-            if c["cfg"] == "ours" and po and c["omega"] != po["omega"]:
-                notes.append(f"Ours ω in the main table at {budget(*b)} is {c['omega']:g}; perf tuning picks {po['omega']:g}.")
+    # the main table runs B1 at the perf pick and top K; the test confirmation at least at the pick
+    for where, by_point in (("main table", main_cells(runs)), ("test table", test_cells(runs))):
+        for b, cs in by_point.items():
+            p, t = tuned.get(b, (None, None))
+            ks = sorted(c["k"] for c in cs if c["cfg"] == "B1")
+            want_k = sorted({c["k"] for c in (p, t) if c})
+            ok = ks == want_k if where == "main table" else p is None or p["k"] in ks
+            if ks and want_k and not ok:
+                notes.append(f"B1 K in the {where} at {budget(*b)} is {ks}; the perf tuning rule gives "
+                             f"pick K={p['k'] if p else '–'} and top K={t['k'] if t else '–'}.")
+            po = pick(by_budget(cells, "ours").get(b, []))
+            for c in cs:
+                if c["cfg"] == "ours" and po and c["omega"] != po["omega"]:
+                    notes.append(f"Ours ω in the {where} at {budget(*b)} is {c['omega']:g}; perf tuning picks "
+                                 f"{po['omega']:g}.")
     for c in cells.values():
         if c["cfg"] == "B2" and c["host_mib"] != round(c["ctx"] * HOST_BYTES_PER_TOKEN / 2 ** 20):
             notes.append(f"B2 tuning at {budget(c['ctx'], c['delay'])} K={c['k']} used {c['host_mib']} MiB of host "
@@ -773,6 +934,11 @@ CAPTIONS = {
         "F2b. 2×2 at 16k ×4 on dev (3 reps per cell at the perf-chosen knobs; B1 and ours from p2_main): "
         "mean, min–max and reps. Grey = no gate, orange = llama.cpp lifecycle, green = managed; arrows = "
         "lifecycle effects with Welch p and the S / n.e. verdict.",
+    "f2c_dev_8k.png":
+        "F2c. 2×2 at 8k ×1 on dev, drawn as F2b (3 reps per cell at the perf-chosen knobs: gated_k K=3, "
+        "managed_k K=3, adm_retain ω=0.5; B1 and ours from p2_main). Bold % = completion below 99.5% (every "
+        "gated cell loses the same ~2 kv_infeasible tasks per run); arrows = lifecycle effects with Welch p "
+        "and the S / n.e. verdict (T4).",
     "f2_decomposition.png": "F2a and F2b side by side (for the notes).",
     "f3_timeline_16k_x4.png":
         "F3. GPU KV over time at 16k ×4 (dev rep0): B1 at the perf-tuned K vs ours, stacked by state "
@@ -783,6 +949,10 @@ CAPTIONS = {
         "F4. Ablations at 16k ×4 (dev): overall goodput per preset (dot = mean, bar = min–max, grey = reps, "
         "hollow = 1 run, n in the label) against ours' mean (line) and rep range (band) and B1 K=4's mean "
         "(dashed); text = Δ vs ours' mean.",
+    "f5_test.png":
+        "F5. Held-out test split (p2_test, test_long_500, 2 reps, knobs frozen from the perf tuning) at 16k ×4 "
+        "and 8k ×1: test goodput per configuration (filled: mean, min–max, reps in grey) next to the same "
+        "knob's dev mean (hollow); text = ours' Δ over the row on test (T7) and test completion below 99.5%.",
     "kv_states.png": "KV token·s by state per configuration at 16k ×4 (dev rep0); B2's breakdown is "
                      "approximate (hatched).",
     "timeline_<point>.png": "GPU KV over time by state for every configuration at 16k ×4 (dev rep0).",
@@ -802,8 +972,9 @@ def report(root: Path, n_boot: int = 2000) -> str:
              "kv_infeasible tasks count as wrong); completion = answered / n. Steady rates (10–90% "
              "completion window) are secondary, since failing tasks frees KV and inflates them.")
     parts = ["# Phase 2 tables", intro,
-             "## T1", t1(cells), "## T2", t2(cells), "## T3", t3(runs, tuned_b1, n_boot), "## T4", t4(runs, cells),
-             "## T5", t5(runs), "## T6", t6(runs), "## Figures", figure_captions(),
+             "## T1", t1(cells), "## T2", t2(cells), "## T3", t3(runs, tuned_b1, n_boot),
+             "## T4", t4(runs, cells, n_boot), "## T5", t5(runs), "## T6", t6(runs), "## T7", t7(runs, tuned_b1, n_boot),
+             "## Figures", figure_captions(),
              "## Data notes", "\n".join(f"- {n}" for n in data_notes(runs, dropped, cells)) or "- none"]
     return "\n\n".join(parts) + "\n"
 

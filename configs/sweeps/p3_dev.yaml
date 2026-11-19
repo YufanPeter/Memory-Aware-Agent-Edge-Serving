@@ -1,0 +1,18 @@
+# Phase 3 step 3 (docs/phase3_spec.md §4): dev evaluation of ours with TRIM, 3 reps, against the
+# Phase 2 untrimmed cells (p2_main / p2_main_rep3: c16k_d4_ours, c8k_d1_ours). Ours keeps its
+# Phase 2 knobs (omega 1; k = K_max: 16 at 16k x4, 8 at 8k x1) and only swaps in the KV priors
+# refit on the p3_select runs of its trim mode, so the comparison isolates TRIM. B1 at its
+# retuned K is in p3_dev_b1.yaml (same sweep name), written by scripts/pick_b1.py from p3_tune.
+# These runs predate KVConfig.shrink_fast (2026-11-19); `shrink_fast: false` reproduces them. The
+# fixed runs are p3_dev_fix.yaml.
+name: p3_dev
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 3, policy: ours, trim_eager: true}
+points:
+  - {name: c16k_d4_ours_oracle, ctx: 16384, delay_scale: 4.0, k: 16, trim: oracle,
+     kvm: {omega: 1.0, priors: configs/kv_priors_trim_oracle.json, shrink_fast: false}}
+  - {name: c16k_d4_ours_rel2, ctx: 16384, delay_scale: 4.0, k: 16, trim: "relevance:2",
+     kvm: {omega: 1.0, priors: configs/kv_priors_trim_relevance2.json, shrink_fast: false}}
+  - {name: c8k_d1_ours_oracle, ctx: 8192, delay_scale: 1.0, k: 8, trim: oracle,
+     kvm: {omega: 1.0, priors: configs/kv_priors_trim_oracle.json, shrink_fast: false}}
+  - {name: c8k_d1_ours_rel2, ctx: 8192, delay_scale: 1.0, k: 8, trim: "relevance:2",
+     kvm: {omega: 1.0, priors: configs/kv_priors_trim_relevance2.json, shrink_fast: false}}

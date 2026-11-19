@@ -1,0 +1,26 @@
+# Phase 3 step 2 (docs/phase3_spec.md §4): B1's fixed K retuned on perf (p1_long_200) per trim mode
+# at the two tight points, 1 rep each, Phase 2 rule (scripts/pick_b1.py): the highest overall
+# goodput among K completing >= 95%, else the highest completion. Trim modes: oracle (bound) and
+# relevance:2 (chosen by the p3_select rule: smallest mean peak among realistic selectors whose
+# F1 is within 0.03 of none's). B1 = fixed K, llama.cpp's own slot policy (observe), eager TRIM.
+# Each grid has one K more than Phase 2's (16k x4: 10; 8k x1: 5), added before any run: TRIM lowers
+# the KV per agent, so B1's best K may sit above the Phase 2 grid.
+name: p3_tune
+defaults: {workload: workloads/p1_long_200.json, parallel: 64, reps: 1, policy: observe, trim_eager: true}
+points:
+  - {name: c16k_d4_b1_oracle_k4, ctx: 16384, delay_scale: 4.0, k: 4, trim: oracle}
+  - {name: c16k_d4_b1_oracle_k6, ctx: 16384, delay_scale: 4.0, k: 6, trim: oracle}
+  - {name: c16k_d4_b1_oracle_k8, ctx: 16384, delay_scale: 4.0, k: 8, trim: oracle}
+  - {name: c16k_d4_b1_oracle_k10, ctx: 16384, delay_scale: 4.0, k: 10, trim: oracle}
+  - {name: c16k_d4_b1_rel2_k4, ctx: 16384, delay_scale: 4.0, k: 4, trim: "relevance:2"}
+  - {name: c16k_d4_b1_rel2_k6, ctx: 16384, delay_scale: 4.0, k: 6, trim: "relevance:2"}
+  - {name: c16k_d4_b1_rel2_k8, ctx: 16384, delay_scale: 4.0, k: 8, trim: "relevance:2"}
+  - {name: c16k_d4_b1_rel2_k10, ctx: 16384, delay_scale: 4.0, k: 10, trim: "relevance:2"}
+  - {name: c8k_d1_b1_oracle_k2, ctx: 8192, delay_scale: 1.0, k: 2, trim: oracle}
+  - {name: c8k_d1_b1_oracle_k3, ctx: 8192, delay_scale: 1.0, k: 3, trim: oracle}
+  - {name: c8k_d1_b1_oracle_k4, ctx: 8192, delay_scale: 1.0, k: 4, trim: oracle}
+  - {name: c8k_d1_b1_oracle_k5, ctx: 8192, delay_scale: 1.0, k: 5, trim: oracle}
+  - {name: c8k_d1_b1_rel2_k2, ctx: 8192, delay_scale: 1.0, k: 2, trim: "relevance:2"}
+  - {name: c8k_d1_b1_rel2_k3, ctx: 8192, delay_scale: 1.0, k: 3, trim: "relevance:2"}
+  - {name: c8k_d1_b1_rel2_k4, ctx: 8192, delay_scale: 1.0, k: 4, trim: "relevance:2"}
+  - {name: c8k_d1_b1_rel2_k5, ctx: 8192, delay_scale: 1.0, k: 5, trim: "relevance:2"}

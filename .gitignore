@@ -18,3 +18,4 @@ docs/**/*.fdb_latexmk
 docs/**/*.out
 docs/phase1/report.pdf
 docs/phase2/report.pdf
+docs/final/report.pdf

@@ -23,6 +23,13 @@ compares against the sweep's budget; with --no-kv-unified it is the per-slot n_c
 reports), `kvm_config` (--kvm-config), `env` (merged into the server's environment only).
 A point's `kvm` and `env` are merged key by key over the defaults' (other keys replace).
 A point without `policy` runs exactly the Phase 1 command line.
+Phase 3 keys: `trim` (a TRIM selector string: none | oracle | drop | referenced | relevance:m,
+passed as --trim) and `trim_eager` (bool, adds --trim-eager: one prefill-only request compacts
+the slot before each tool wait). Both default to off and add their flags only when set, so a
+point without them runs exactly the Phase 2 command line. They are checked when the spec is
+loaded, so a typo fails before any server starts:
+      - {name: c16k_ours_ref, ctx: 16384, k: 16, policy: ours, trim: referenced}
+      - {name: c16k_ours_rel2_eager, ctx: 16384, k: 16, policy: ours, trim: "relevance:2", trim_eager: true}
 Results: results/<name>/<point>/rep<i>/ (runner outputs + server_cmd.txt + server.log). After
 each run, the server log's purge / overflow / host-cache lines are counted into
 summary.json["server_log"] (analysis/server_log.py).
@@ -45,10 +52,12 @@ import httpx
 import yaml
 
 from analysis import server_log
+from edgeserve.trim import parse_mode
 
 DEFAULTS: dict[str, Any] = {"ctx": 65536, "parallel": 64, "cache_ram": 0, "extra": "", "delay_scale": 1.0,
                             "pin": True, "cache": True, "reps": 1, "task_timeout": 900, "seed": 0, "port": 8080,
-                            "policy": None, "kvm": {}, "kvm_config": None, "env": {}}
+                            "policy": None, "kvm": {}, "kvm_config": None, "env": {}, "trim": None,
+                            "trim_eager": False}
 SLOT_DIR = "/dev/shm/slots"
 
 
@@ -111,6 +120,10 @@ def runner_args(p: dict[str, Any], out: Path, mock: bool = False) -> list[str]:
             runner += ["--kvm", json.dumps(kvm, sort_keys=True)]
         if p["kvm_config"]:
             runner += ["--kvm-config", str(p["kvm_config"])]
+    if p["trim"] is not None:
+        runner += ["--trim", str(parse_mode(p["trim"]))]
+    if p["trim_eager"]:
+        runner.append("--trim-eager")
     if mock:   # a Phase 2 point gets a MockPoolLLM shaped like its server (-c from --kvm ctx)
         runner.append("--mock")
         if p["policy"]:
@@ -158,6 +171,8 @@ def report(name: str, rep: int, out: Path, s: dict[str, Any], dt: float) -> None
             line += f" (VIOLATION: purge {sl['purge_violations']}, overflow {sl['overflow_violations']})"
     if (kv := s.get("kv")) and isinstance(kv, dict) and kv.get("violations"):
         line += f", kv violations {kv['violations']}"
+    if tr := s.get("trim"):
+        line += f", trim {tr['mode']} kept {tr['kept_char_share']} of obs chars, sf {tr['sf_kept_share']}"
     print(line, flush=True)
 
 
@@ -223,6 +238,18 @@ def run_point(name: str, p: dict[str, Any], rep: int, out: Path, dry: bool, mock
             print(f"!! {name} rep{rep}: {msg}")
 
 
+def check_trim(name: str, p: dict[str, Any]) -> None:
+    """Fail at load time on a bad trim key (a typo would otherwise surface per run)."""
+    try:
+        mode = parse_mode(p["trim"] if p["trim"] is not None else "none")
+    except ValueError as e:
+        raise SystemExit(f"point {name}: {e}") from None
+    if not isinstance(p["trim_eager"], bool):
+        raise SystemExit(f"point {name}: trim_eager must be true or false, got {p['trim_eager']!r}")
+    if p["trim_eager"] and not mode.active:
+        raise SystemExit(f"point {name}: trim_eager needs a trim mode other than none")
+
+
 def points(spec: dict[str, Any], only: set[str] | None = None) -> list[tuple[str, dict[str, Any]]]:
     """Points merged over the defaults; `kvm` and `env` merge key by key."""
     base = {**DEFAULTS, **spec.get("defaults", {})}
@@ -233,6 +260,7 @@ def points(spec: dict[str, Any], only: set[str] | None = None) -> list[tuple[str
         p = {**base, **pt}
         for key in ("kvm", "env"):
             p[key] = {**(base.get(key) or {}), **(pt.get(key) or {})}
+        check_trim(pt["name"], p)
         out.append((pt["name"], p))
     return out
 

@@ -1,0 +1,10 @@
+# Phase 3 step 3, quality: TRIM at ample memory on dev (64k x1, B1 K = 8, observe, eager), 2 reps,
+# so answer quality is measured without KV pressure: none, oracle, the chosen relevance:2, drop.
+name: p3_quality
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 2, ctx: 65536, delay_scale: 1.0, k: 8,
+           policy: observe}
+points:
+  - {name: c64k_d1_none}
+  - {name: c64k_d1_oracle, trim: oracle, trim_eager: true}
+  - {name: c64k_d1_rel2, trim: "relevance:2", trim_eager: true}
+  - {name: c64k_d1_drop, trim: drop, trim_eager: true}

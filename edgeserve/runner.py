@@ -19,12 +19,21 @@ MockPoolLLM, a bounded KV cell pool with slot actions, so every preset runs on a
 
 Without --policy and --mock-capacity the runner behaves exactly as in Phase 1.
 
+Phase 3: `--trim MODE` (none | oracle | drop | referenced | relevance:m) compacts consumed
+observations (edgeserve/trim.py), lazily before the next request or, with `--trim-eager`, with
+one prefill-only 'trim' request before each tool wait. `--mock-searches N` makes the mock agent
+search N times before it answers, so a mock run has observations to compact:
+
+    uv run python -m edgeserve.runner --workload workloads/smoke.json --k 2 --mock --mock-searches 3 \
+        --trim oracle --out results/mock_trim
+
 Outputs in --out: events.jsonl, tasks.jsonl, meta.json, summary.json.
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
+import functools
 import hashlib
 import itertools
 import json
@@ -41,7 +50,7 @@ from typing import Any
 import httpx
 import psutil
 
-from edgeserve.agent import Agent, TaskTrace
+from edgeserve.agent import TRIM_TOTALS, Agent, TaskTrace
 from edgeserve.corpus import Corpus
 from edgeserve.data import load_split
 from edgeserve.eval import exact_match, f1_score, sf_recall
@@ -51,22 +60,27 @@ from edgeserve.llm import LlamaServerClient, MockLLM, SlotControl
 from edgeserve.mockpool import MockPoolLLM
 from edgeserve.policies import KVM_CONFIG_PATH, load_policy
 from edgeserve.profiles import PROFILES_PATH, load_profiles
+from edgeserve.trim import idf_table, parse_mode
 from edgeserve.workload import load_workload
 
 LLAMA_CACHE_RAM_DEFAULT = 8192.0   # MiB: llama-server enables its host prompt cache unless told otherwise
 
 
-def mock_script(prompt: str) -> str:
-    """Searches the question's first capitalized phrase once, then finishes with it."""
+def mock_script(prompt: str, searches: int = 1) -> str:
+    """Searches the question's capitalized phrases in turn, `searches` times, then finishes
+    with the first. The reply depends on the prompt alone, so an extra request (TRIM's
+    prefill-only one) cannot shift the script."""
     if prompt.endswith("finish["):
         return "unknown]"
     task_part = prompt.rsplit("Question: ", 1)[-1]   # skip the few-shot examples
     n_obs = task_part.count("\nObservation ")
     question = task_part.split("<|im_end|>")[0]
-    entity = (re.findall(r"[A-Z][\w'-]+(?: [A-Z][\w'-]+)*", question) or ["Wikipedia"])[0]
-    if "Context:\n" in prompt or n_obs >= 1:
+    entities = re.findall(r"[A-Z][\w'-]+(?: [A-Z][\w'-]+)*", question) or ["Wikipedia"]
+    entity = entities[0]
+    if "Context:\n" in prompt or n_obs >= searches:
         return f" I have enough information.\nAction {n_obs + 1}: finish[{entity}]"
-    return f" I need to search {entity}.\nAction 1: search[{entity}]\nObservation"
+    target = entities[n_obs % len(entities)]
+    return f" I need to search {target}.\nAction {n_obs + 1}: search[{target}]\nObservation"
 
 
 def server_flag(cmd: str, *flags: str) -> str | None:
@@ -143,11 +157,42 @@ def _quantile(xs: list[float], p: float) -> float | None:
     return xs[min(len(xs) - 1, int(p * len(xs)))] if xs else None
 
 
-def _req_sum(row: dict[str, Any], key: str) -> int:
-    return sum(int(s["llm"].get(key) or 0) for s in row["trace"]["steps"])
+def _req_sum(row: dict[str, Any], key: str, trim: bool | None = None) -> int:
+    """Sum of an LLM counter over a task's requests: all of them (trim None), the agent's own
+    steps only (False), or TRIM's prefill-only requests only (True)."""
+    return sum(int(s["llm"].get(key) or 0) for s in row["trace"]["steps"]
+               if trim is None or (s["kind"] == "trim") == trim)
+
+
+def n_steps(trace: dict[str, Any], trim: bool = False) -> int:
+    """LLM calls of the agent itself (trim False) or TRIM requests (True): steps_mean counts
+    the first, so an eager run's extra prefill requests do not inflate steps per task."""
+    return sum(1 for s in trace["steps"] if (s["kind"] == "trim") == trim)
+
+
+def trim_summary(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Run totals of the per-task TRIM counters (agent.TRIM_TOTALS), the kept shares, and the
+    trim requests' own server counts. None when no task ran with TRIM."""
+    tr = [r["trace"]["trim"] for r in rows if r["trace"].get("trim")]
+    if not tr:
+        return None
+    tot = {k: sum(int(t.get(k) or 0) for t in tr) for k in TRIM_TOTALS + ("chars_removed",)}
+    sf = tot["sf_kept"] + tot["sf_dropped"]
+    sents = tot["sents_kept"] + tot["sents_dropped"]
+    return {"mode": tr[0]["mode"], "eager": tr[0]["eager"], **tot,
+            "kept_char_share": round(tot["chars_after"] / tot["chars_before"], 4) if tot["chars_before"] else None,
+            "kept_sentence_share": round(tot["sents_kept"] / sents, 4) if sents else None,
+            "sf_kept_share": round(tot["sf_kept"] / sf, 4) if sf else None,
+            "trim_requests_per_task": round(tot["requests"] / len(rows), 3) if rows else None,
+            "trim_prefill_tokens_total": sum(_req_sum(r, "prompt_n", trim=True) for r in rows),
+            "trim_cached_tokens_total": sum(_req_sum(r, "cache_n", trim=True) for r in rows)}
 
 
 def summarize(rows: list[dict[str, Any]], makespan: float) -> dict[str, Any]:
+    """Run metrics. steps_mean and decode_tokens_mean count the agent's own LLM calls; the
+    prefill / cached totals and the hit rate count every request the server ran, TRIM's
+    prefill-only ones included, since that prefill is real work (summary["trim"] has their
+    share, see trim_summary)."""
     lat = [r["latency_s"] for r in rows]
     statuses: dict[str, int] = {}
     for r in rows:
@@ -185,7 +230,8 @@ def summarize(rows: list[dict[str, Any]], makespan: float) -> dict[str, Any]:
         "queue_wait_mean_s": mean("queue_wait_s"),
         "queue_wait_p95_s": _quantile([r["queue_wait_s"] for r in rows], 0.95),
         "em": mean("em"), "f1": mean("f1"), "sf_recall": mean("sf_recall"), "steps_mean": mean("n_llm_calls"),
-        "decode_tokens_mean": round(statistics.mean(_req_sum(r, "predicted_n") for r in rows), 1) if rows else None,
+        "decode_tokens_mean": round(statistics.mean(_req_sum(r, "predicted_n", trim=False) for r in rows), 1)
+        if rows else None,
         "prefill_tokens_total": prompt_n, "cached_tokens_total": cache_n,
         "cache_hit_rate": round(cache_n / (prompt_n + cache_n), 4) if prompt_n + cache_n else None,
     }
@@ -198,7 +244,15 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     wl = load_workload(args.workload)
     profiles = load_profiles(args.profiles)
     items = {it.id: it for it in load_split(wl["meta"].get("split", "dev"))}
+    try:
+        trim = parse_mode(args.trim)
+    except ValueError as e:
+        raise SystemExit(str(e)) from None
+    if args.trim_eager and not trim.active:
+        raise SystemExit("--trim-eager needs a --trim mode other than none")
     corpus = Corpus.load(with_bm25=True)   # search suggestions and react_long neighbors
+    if trim.needs_idf:   # seconds of tokenizing: done before the run's clock (EventLog) starts
+        idf_table(corpus)
 
     server_cmd = (out / "server_cmd.txt").read_text(encoding="utf-8").strip() \
         if (out / "server_cmd.txt").exists() else None   # written by scripts/sweep.py or start_server.sh
@@ -221,6 +275,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     llm: Any
     ctl: Any = None
     pool: MockPoolLLM | None = None
+    script = mock_script if args.mock_searches == 1 else functools.partial(mock_script, searches=args.mock_searches)
     if args.mock and (cfg is not None or args.mock_capacity is not None):
         capacity = args.mock_capacity or (cfg.ctx if cfg and cfg.ctx else None)
         if cfg is not None and not capacity:
@@ -229,14 +284,14 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         slot_dir.mkdir(exist_ok=True)
         for f in slot_dir.glob("*.bin"):
             f.unlink()
-        pool = MockPoolLLM(mock_script, capacity=capacity, n_slots=args.mock_slots, t_prefill=args.mock_prefill_s,
+        pool = MockPoolLLM(script, capacity=capacity, n_slots=args.mock_slots, t_prefill=args.mock_prefill_s,
                            t_decode=args.mock_decode_s, cache_ram_mib=args.mock_cache_ram, slot_dir=slot_dir,
                            op_timeout_s=cfg.op_timeout_s if cfg else 5.0)
         llm = ctl = pool
         if cfg is not None:
             cfg.slot_dir, cfg.cache_ram_mib = str(slot_dir), args.mock_cache_ram
     elif args.mock:
-        llm = MockLLM(mock_script, prefill_s_per_token=1e-5, decode_s_per_token=1e-3)
+        llm = MockLLM(script, prefill_s_per_token=1e-5, decode_s_per_token=1e-3)
     else:
         llm = LlamaServerClient(args.base_url, seed=args.seed, cache_prompt=not args.no_cache)
         if cfg is not None:
@@ -263,7 +318,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         kvm = KVManager(ctl, events, cfg, llm, profiles=profiles)
         events.listeners.append(kvm.on_event)
     agent = Agent(ManagedLLM(llm, kvm) if kvm else llm, corpus, events, seed=args.seed,
-                  delay_scale=args.delay_scale)
+                  delay_scale=args.delay_scale, trim=trim, trim_eager=args.trim_eager)
     queue: asyncio.Queue = asyncio.Queue()
     rows: list[dict[str, Any]] = []
     tasks_f = open(out / "tasks.jsonl", "w", buffering=1, encoding="utf-8", newline="\n")
@@ -316,6 +371,9 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                 "latency_s": round(t_done - t_arrive, 4), "service_s": round(t_done - t_admit, 4),
                 "n_llm_calls": len(trace.steps), "trace": trace.to_dict(),
             }
+            if trace.trim is not None:   # TRIM's prefill-only requests are not agent steps
+                row["n_llm_calls"] = n_steps(row["trace"])
+                row["n_trim_calls"] = n_steps(row["trace"], trim=True)
             if kvm is not None:
                 row["kv"] = kvm.task_stats(t["task_id"])
             rows.append(row)
@@ -344,6 +402,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         "workload": args.workload, "workload_sha": hashlib.sha256(wl_text.encode()).hexdigest()[:16],
         "workload_meta": wl["meta"], "k": args.k, "pin_slots": args.pin, "cache_prompt": not args.no_cache,
         "delay_scale": args.delay_scale, "seed": args.seed, "mock": args.mock,
+        "trim": str(trim), "trim_eager": args.trim_eager,
         "profiles": {n: p.__dict__ for n, p in profiles.items()},
         "server_props": {k: props.get(k) for k in ("build_info", "model_path", "total_slots",
                                                    "default_generation_settings") if k in props},
@@ -354,11 +413,15 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         meta["server_cmd"] = server_cmd
     if cfg is not None:
         meta["kvm"] = asdict(cfg) | {"policy": args.policy, "kvm_config": args.kvm_config}
+    if args.mock and args.mock_searches != 1:
+        meta["mock_searches"] = args.mock_searches
     if pool is not None:
         meta["mock_pool"] = {"capacity": pool.capacity, "n_slots": pool.n_slots, "t_prefill": pool.t_prefill,
                              "t_decode": pool.t_decode, "cache_ram_mib": pool.cache_ram_mib}
     (out / "meta.json").write_text(json.dumps(meta, indent=1, default=str), encoding="utf-8", newline="\n")
     summary = summarize(rows, makespan)
+    if (ts := trim_summary(rows)) is not None:
+        summary["trim"] = ts
     if kvm is not None:
         summary["kv"] = kvm.summary()
     if pool is not None:
@@ -390,6 +453,11 @@ def main() -> None:
     ap.add_argument("--mock-prefill-s", type=float, default=1e-5, help="MockPoolLLM seconds per prefill token")
     ap.add_argument("--mock-decode-s", type=float, default=1e-3, help="MockPoolLLM seconds per decoded token")
     ap.add_argument("--mock-cache-ram", type=float, default=0.0, help="MockPoolLLM --cache-ram emulation (MiB)")
+    ap.add_argument("--mock-searches", type=int, default=1, help="with --mock: searches per ReAct task before finish")
+    ap.add_argument("--trim", default="none",
+                    help="Phase 3 TRIM selector: none | oracle | drop | referenced | relevance:m")
+    ap.add_argument("--trim-eager", action="store_true",
+                    help="compact with a prefill-only request before each tool wait (default: lazily)")
     args = ap.parse_args()
     print(json.dumps(asyncio.run(run(args)), indent=1))
 

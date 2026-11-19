@@ -12,6 +12,9 @@ table never disagree.
                              reps at those knobs (min-max), with the lifecycle effects (Welch p, verdict)
   f2a_tuning.png, f2b_dev.png  the two F2 panels alone, drawn at the size the report prints them
                              (F2b one column wide, F2a on the one-column appendix page)
+  f2c_dev_8k.png             the 8k x1 dev 2x2 in F2b's style (same layout, arrows and verdicts)
+  f5_test.png                held-out test split (p2_test): goodput per configuration at each headline
+                             point, test reps vs the same knob's dev mean, with test completion
   f3_timeline_16k_x4.png     dev rep0 at 16k x4: GPU KV by state over time, B1 (tuned K) vs ours, with
                              llama.cpp purges and failed tasks marked
   f4_ablations.png           dev ablations at 16k x4: goodput per preset (dots, min-max, n reps) vs ours'
@@ -121,13 +124,13 @@ PURGE_CFGS = ("gated_k", "adm_retain")   # llama.cpp's lifecycle under a gate: i
 F2_NOTE = 6.5   # pt: F2a/F2b are drawn at the size they are printed, so nothing goes below this
 
 
-def f2_dev(runs: list[R.Run], tuning: dict) -> dict[str, R.Cell]:
-    """F2's dev panel: the dev reps at the knobs fixed from the perf tuning (p2_2x2; B1 and ours
-    from p2_main), never re-picked on dev. Empty until p2_2x2 has runs."""
-    chosen, _ = R.dev_2x2(runs, tuning)
+def f2_dev(runs: list[R.Run], tuning: dict, point: tuple[int, float] = R.HEAD) -> dict[str, R.Cell]:
+    """F2's dev panel at one 2x2 point: the dev reps at the knobs fixed from the perf tuning
+    (p2_2x2; B1 and ours from p2_main), never re-picked on dev. Empty until p2_2x2 has runs there."""
+    chosen, _ = R.dev_2x2(runs, tuning, point)
     if not any(chosen.values()):
         return {}
-    main = R.main_cells(runs).get(R.HEAD, [])
+    main = R.main_cells(runs).get(point, [])
     out = {cfg: c for cfg, c in chosen.items() if c}
     out.update({f"B1 K={c['k']}": c for c in sorted((c for c in main if c["cfg"] == "B1"), key=R.order)})
     if ours := next((c for c in main if c["cfg"] == "ours"), None):
@@ -136,13 +139,9 @@ def f2_dev(runs: list[R.Run], tuning: dict) -> dict[str, R.Cell]:
 
 
 def verdict(base: R.Cell, new: R.Cell) -> str:
-    """The report's decision rule: S iff Welch p < 0.05 and the steady bootstrap CI excludes 0."""
-    p = R.delta(base, new)["p"]
-    ci = R.steady_ci(base, new, 2000)
-    if p is None or ci is None:
-        return "n.e."
-    lo, hi = ci["ci"]
-    return "S" if p < 0.05 and (lo > 0 or hi < 0) else "n.e."
+    """The report's decision rule (R.verdict): S iff Welch p < 0.05 and the steady bootstrap CI
+    excludes 0, with the tables' 2000 replicates."""
+    return R.verdict(R.delta(base, new), R.steady_ci(base, new, 2000))
 
 
 def knob_label(c: R.Cell) -> str:
@@ -286,12 +285,13 @@ def fig_f2(runs: list[R.Run], out: Path) -> None:
     fig.savefig(out / "f2a_tuning.png", dpi=300)
     plt.close(fig)
 
-    if dev:
-        fig, d = plt.subplots(figsize=(W, 1.95), layout="constrained")   # colours in the report caption
-        fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02)
-        f2_dev_panel(d, dev, F2_NOTE)
-        fig.savefig(out / "f2b_dev.png", dpi=300)
-        plt.close(fig)
+    for name, cells in (("f2b_dev.png", dev), ("f2c_dev_8k.png", f2_dev(runs, tuning, (8192, 1.0)))):
+        if cells:   # the same panel at each 2x2 point; colours in the report caption
+            fig, d = plt.subplots(figsize=(W, 1.95), layout="constrained")
+            fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02)
+            f2_dev_panel(d, cells, F2_NOTE)
+            fig.savefig(out / name, dpi=300)
+            plt.close(fig)
 
     fig, (a, d) = plt.subplots(1, 2, figsize=(10.5, 3.4), layout="constrained",
                                gridspec_kw={"width_ratios": (1.35, 1)})
@@ -434,6 +434,64 @@ def fig_f4(runs: list[R.Run], out: Path) -> None:
     plt.close(fig)
 
 
+def dev_twin(runs: list[R.Run], tuning: dict, c: R.Cell) -> R.Cell | None:
+    """The dev cell (p2_main, or the dev 2x2 at its perf knob) with a test cell's configuration
+    and knob at the same point, or None."""
+    b = (c["ctx"], c["delay"])
+    dev = [*R.main_cells(runs).get(b, []), *(x for x in R.dev_2x2(runs, tuning, b)[0].values() if x)]
+    return next((d for d in dev if (d["cfg"], R.knob_value(d), d["host_mib"]) == (c["cfg"], R.knob_value(c),
+                                                                                    c["host_mib"])), None)
+
+
+def fig_f5(runs: list[R.Run], out: Path) -> None:
+    """Held-out test split: per headline point, each configuration's test goodput (mean, min-max,
+    reps) against the same knob's dev mean (hollow), with ours' Δ over the row (T7's number) and
+    test completion where it is < 99.5%."""
+    cells = R.test_cells(runs)
+    pts = sorted(cells, key=R.point_order)
+    if not pts:
+        return
+    tuning = R.tuning_cells(runs)
+    tuned = R.picks(tuning, "B1")
+    style = {"gated_k": (LLAMA, "o", "gated_k")}
+    fig, axes = plt.subplots(len(pts), 1, figsize=(W, 0.7 + sum(0.2 * len(cells[b]) + 0.3 for b in pts)),
+                             squeeze=False, layout="constrained",
+                             gridspec_kw={"height_ratios": [len(cells[b]) + 1 for b in pts]})
+    fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02, hspace=0.04)
+    for a, b in zip(axes[:, 0], pts):
+        cs = cells[b]
+        ours = next((c for c in cs if c["cfg"] == "ours"), None)
+        labels, xs = [], []
+        for i, c in enumerate(cs):
+            mark = R.b1_mark(c, tuned) if c["cfg"] == "B1" else ""
+            color, marker, _ = style.get(c["cfg"]) or CFG_STYLE[style_key(c, mark)]
+            reps = [r["goodput"] for r in c["runs"] if r["goodput"] is not None]
+            a.scatter(reps, [i + 0.24] * len(reps), s=5, color="#718096", lw=0, zorder=2)
+            a.errorbar([c["goodput"]], [i], xerr=[[c["goodput"] - c["goodput_lo"]], [c["goodput_hi"] - c["goodput"]]],
+                       fmt=marker, color=color, ms=4, capsize=1.5, lw=0.9, zorder=3)
+            xs += [c["goodput_lo"], c["goodput_hi"]]
+            if (d := dev_twin(runs, tuning, c)) is not None and d["goodput"] is not None:
+                a.plot([d["goodput"]], [i], marker=marker, mfc="white", mec=color, mew=0.9, ms=4.5, lw=0, zorder=2)
+                xs.append(d["goodput"])
+            txt = f"ours {R.rel(c['goodput'], ours['goodput']):+.0f}%" if ours and c is not ours else ""   # as T7
+            if c["completion"] is not None and c["completion"] < 0.995:
+                txt += (", " if txt else "") + f"{100 * c['completion']:.0f}% done"
+            a.annotate(txt, (max(c["goodput_hi"], (d or {}).get("goodput") or 0), i), textcoords="offset points",
+                       xytext=(5, 0), va="center", fontsize=5.8, color="#2d3748")
+            labels.append(f"{c['cfg']}{mark} {R.knob(c).replace(', ', ' ')}")
+        a.set_yticks(range(len(cs)), labels, fontsize=6.3)
+        a.invert_yaxis()
+        a.grid(axis="y", visible=False)
+        a.tick_params(axis="x", labelsize=6.5)
+        a.set_xlim(min(xs) - 0.4, max(xs) + 2.6)   # dots, not bars; room for the text on the right
+        n = sorted({c["n"] for c in cs})
+        a.set_title(f"{R.budget(*b)}: test, {'/'.join(map(str, n))} reps", fontsize=7, pad=2)
+    fig.supxlabel("overall goodput (correct tasks/min)\nfilled: test mean, min–max, reps (grey); hollow: dev mean, "
+                  "same knob\ntext: ours vs this row on test (as in T7); test completion if < 99.5%", fontsize=5.8)
+    fig.savefig(out / "f5_test.png")
+    plt.close(fig)
+
+
 def head_rep0(root: Path) -> list[Path]:
     return sorted((root / R.MAIN).glob("c16k_d4_*/rep0"))
 
@@ -508,7 +566,7 @@ def main() -> None:
     root, out = Path(args.root), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     runs, _ = R.load_runs(root)
-    for fig in (fig_f1, fig_f2, fig_f3, fig_f4):
+    for fig in (fig_f1, fig_f2, fig_f3, fig_f4, fig_f5):
         fig(runs, out)
     fig_states(root, out)
     fig_timelines(root, out)

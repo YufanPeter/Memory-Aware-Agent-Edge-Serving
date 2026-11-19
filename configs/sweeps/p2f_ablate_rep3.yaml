@@ -1,0 +1,9 @@
+# Follow-up: the two main-table cells that ran in p2_ablate (2 reps) get a third rep. Same sweep
+# name, defaults and point definitions as p2_ablate, so only rep2 runs.
+name: p2_ablate
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 1, ctx: 16384, delay_scale: 4.0, k: 16,
+           kvm: {omega: 1.0}}
+points:
+  - {name: c16k_d1_b1_k5, ctx: 16384, delay_scale: 1.0, k: 5, policy: observe, kvm: {}, reps: 3}
+  - {name: c8k_d1_b2_k2, ctx: 8192, delay_scale: 1.0, k: 2, policy: observe, kvm: {}, cache_ram: 448, pin: false,
+     parallel: k, reps: 3}

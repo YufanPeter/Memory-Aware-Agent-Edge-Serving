@@ -1,0 +1,2181 @@
+{
+ "closedbook": {
+  "events": [
+   {
+    "kind": "oneshot",
+    "prompt_chars": 336,
+    "slot": 0,
+    "step": 1,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 0,
+    "error": null,
+    "kind": "oneshot",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 8,
+    "prompt_ms": 0.0,
+    "prompt_n": 84,
+    "retries": 0,
+    "slot": 0,
+    "step": 1,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   }
+  ],
+  "prompt_chars": [
+   336
+  ],
+  "prompts": [
+   "22d883163984c0deea8c64338427b7e365d032f67cc55cad9191f6cdc2c01716"
+  ],
+  "trace": {
+   "error": null,
+   "prediction": "yes",
+   "profile": "c",
+   "qid": "q1",
+   "qtype": "comparison",
+   "segments": [
+    [
+     "shared_prefix",
+     "<|im_start|>system\nAnswer the question from your own knowledge.\nWrite one Thought line with your reasoning, then one Action line of the form finish[answer].\nThe answer is a short phrase, or yes/no.<|im_end|>\n<|im_start|>user\n"
+    ],
+    [
+     "control",
+     "Question: "
+    ],
+    [
+     "question",
+     "Were Scott Derrickson and Ed Wood of the same nationality?"
+    ],
+    [
+     "control",
+     "<|im_end|>\n<|im_start|>assistant\nThought 1:"
+    ],
+    [
+     "thought_action",
+     " I think so.\nAction 1: finish[yes]"
+    ]
+   ],
+   "sf_seen": [],
+   "slot": 0,
+   "status": "ok",
+   "steps": [
+    {
+     "action": "finish",
+     "arg": "yes",
+     "kind": "oneshot",
+     "llm": {
+      "cache_n": 0,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 8,
+      "prompt_ms": 0.0,
+      "prompt_n": 84,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 0,
+     "output": " I think so.\nAction 1: finish[yes]",
+     "step": 1,
+     "tool_delay_s": 0.0
+    }
+   ],
+   "task_id": "t0"
+  }
+ },
+ "forced": {
+  "events": [
+   {
+    "kind": "react",
+    "prompt_chars": 1623,
+    "slot": 0,
+    "step": 1,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 0,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 15,
+    "prompt_ms": 0.0,
+    "prompt_n": 405,
+    "retries": 0,
+    "slot": 0,
+    "step": 1,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.0,
+    "step": 1,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 163,
+    "step": 1,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_end"
+   },
+   {
+    "kind": "react",
+    "prompt_chars": 1873,
+    "slot": 0,
+    "step": 2,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 420,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 13,
+    "prompt_ms": 0.0,
+    "prompt_n": 47,
+    "retries": 0,
+    "slot": 0,
+    "step": 2,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.0,
+    "step": 2,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 97,
+    "step": 2,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_end"
+   },
+   {
+    "kind": "react",
+    "prompt_chars": 2052,
+    "slot": 0,
+    "step": 3,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 482,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 17,
+    "prompt_ms": 0.0,
+    "prompt_n": 31,
+    "retries": 0,
+    "slot": 0,
+    "step": 3,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.0,
+    "step": 3,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 98,
+    "step": 3,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_end"
+   },
+   {
+    "kind": "forced_finish",
+    "prompt_chars": 2297,
+    "slot": 0,
+    "step": 4,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 530,
+    "error": null,
+    "kind": "forced_finish",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 1,
+    "prompt_ms": 0.0,
+    "prompt_n": 44,
+    "retries": 0,
+    "slot": 0,
+    "step": 4,
+    "stop_type": "word",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   }
+  ],
+  "prompt_chars": [
+   1623,
+   1873,
+   2052,
+   2297
+  ],
+  "prompts": [
+   "5109cec093a26f69401ee2bf4a44843643d13692f24380ccd63a5a1829f1b37b",
+   "3940805c063d6e4029531a4ad1a0a10945325be1ddd3dc1e7649fc85dd96e1cd",
+   "47529291443b6ab6c172bb7da9d5bebe49e5b1ad6cf00e1bb4bd6f80a97b610d",
+   "53b2cf841234f851de69c917b6df3c32bd0a327a14ea2c937c9adb212c91751c"
+  ],
+  "trace": {
+   "error": null,
+   "prediction": "Ed Wood",
+   "profile": "forced",
+   "qid": "q1",
+   "qtype": "comparison",
+   "segments": [
+    [
+     "shared_prefix",
+     "<|im_start|>system\nSolve a question answering task by interleaving Thought, Action and Observation steps.\nThought reasons about the current situation. Action is one of three types:\n(1) search[entity]: returns the first sentences of the Wikipedia paragraph about entity if it exists. If not, it returns the closest full-text search result and lists similar titles.\n(2) lookup[keyword]: returns the next sentence containing keyword in the paragraph you searched last.\n(3) finish[answer]: returns the answer and finishes the task. The answer is a short phrase taken from the observations, or yes/no.\nEach step is exactly one Thought line and one Action line. Then stop and wait for the Observation.\n\nHere are some examples.\n\nQuestion: The director of the film Jaws was born in which city?\nThought 1: I need to find who directed Jaws, then find where that person was born.\nAction 1: search[Jaws (film)]\nObservation 1: [Jaws (film)] Jaws is a 1975 American thriller film directed by Steven Spielberg and based on the 1974 novel by Peter Benchley. It stars Roy Scheider as police chief Martin Brody.\nThought 2: Jaws was directed by Steven Spielberg. Now I need his birthplace.\nAction 2: search[Steven Spielberg]\nObservation 2: [Steven Spielberg] Steven Allan Spielberg (born December 18, 1946) is an American filmmaker. He was born in Cincinnati, Ohio, and grew up in New Jersey, Arizona and California.\nThought 3: Steven Spielberg was born in Cincinnati, Ohio.\nAction 3: finish[Cincinnati]<|im_end|>\n<|im_start|>user\nQuestion: "
+    ],
+    [
+     "question",
+     "Were Scott Derrickson and Ed Wood of the same nationality?"
+    ],
+    [
+     "control",
+     "<|im_end|>\n<|im_start|>assistant\nThought 1:"
+    ],
+    [
+     "thought_action",
+     " I need Scott Derrickson.\nAction 1: search[Scott Derrickson]"
+    ],
+    [
+     "control",
+     "\nObservation 1: "
+    ],
+    [
+     "obs_meta",
+     "[Scott Derrickson] "
+    ],
+    [
+     "obs_sf",
+     "Scott Derrickson (born July 16, 1966) is an American director."
+    ],
+    [
+     "obs_other",
+     " He lives in Los Angeles, California."
+    ],
+    [
+     "obs_other",
+     " He is best known for directing horror films."
+    ],
+    [
+     "control",
+     "\nThought 2:"
+    ],
+    [
+     "thought_action",
+     " He is American. Now Ed Wood.\nAction 2: search[Ed Wood]"
+    ],
+    [
+     "control",
+     "\nObservation 2: "
+    ],
+    [
+     "obs_meta",
+     "[Ed Wood] "
+    ],
+    [
+     "obs_sf",
+     "Edward Davis Wood Jr. was an American filmmaker."
+    ],
+    [
+     "obs_other",
+     " He was born in Poughkeepsie, New York."
+    ],
+    [
+     "control",
+     "\nThought 3:"
+    ],
+    [
+     "thought_action",
+     " Ed Wood was American. And the film.\nAction 3: search[Doctor Strange]"
+    ],
+    [
+     "control",
+     "\nObservation 3: "
+    ],
+    [
+     "obs_meta",
+     "[Doctor Strange (2016 film)] "
+    ],
+    [
+     "obs_other",
+     "Doctor Strange is a 2016 superhero film directed by Scott Derrickson."
+    ],
+    [
+     "control",
+     "\nThought 4: I must give my final answer now.\nAction 4: finish["
+    ],
+    [
+     "thought_action",
+     "Ed Wood"
+    ],
+    [
+     "control",
+     "]"
+    ]
+   ],
+   "sf_seen": [
+    [
+     "Ed Wood",
+     0
+    ],
+    [
+     "Scott Derrickson",
+     0
+    ]
+   ],
+   "slot": 0,
+   "status": "forced",
+   "steps": [
+    {
+     "action": "search",
+     "arg": "Scott Derrickson",
+     "kind": "react",
+     "llm": {
+      "cache_n": 0,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 15,
+      "prompt_ms": 0.0,
+      "prompt_n": 405,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 163,
+     "output": " I need Scott Derrickson.\nAction 1: search[Scott Derrickson]",
+     "step": 1,
+     "tool_delay_s": 0.0
+    },
+    {
+     "action": "search",
+     "arg": "Ed Wood",
+     "kind": "react",
+     "llm": {
+      "cache_n": 420,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 13,
+      "prompt_ms": 0.0,
+      "prompt_n": 47,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 97,
+     "output": " He is American. Now Ed Wood.\nAction 2: search[Ed Wood]",
+     "step": 2,
+     "tool_delay_s": 0.0
+    },
+    {
+     "action": "search",
+     "arg": "Doctor Strange",
+     "kind": "react",
+     "llm": {
+      "cache_n": 482,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 17,
+      "prompt_ms": 0.0,
+      "prompt_n": 31,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 98,
+     "output": " Ed Wood was American. And the film.\nAction 3: search[Doctor Strange]",
+     "step": 3,
+     "tool_delay_s": 0.0
+    },
+    {
+     "action": "finish",
+     "arg": "Ed Wood",
+     "kind": "forced_finish",
+     "llm": {
+      "cache_n": 530,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 1,
+      "prompt_ms": 0.0,
+      "prompt_n": 44,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "word",
+      "truncated": false
+     },
+     "obs_chars": 0,
+     "output": "Ed Wood",
+     "step": 4,
+     "tool_delay_s": 0.0
+    }
+   ],
+   "task_id": "t0"
+  }
+ },
+ "mixed_explain": {
+  "events": [
+   {
+    "kind": "react",
+    "prompt_chars": 2686,
+    "slot": 0,
+    "step": 1,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 0,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 18,
+    "prompt_ms": 0.0,
+    "prompt_n": 671,
+    "retries": 0,
+    "slot": 0,
+    "step": 1,
+    "stop_type": "word",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.0006689004027382036,
+    "step": 1,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 163,
+    "step": 1,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_end"
+   },
+   {
+    "kind": "react",
+    "prompt_chars": 2950,
+    "slot": 0,
+    "step": 2,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 690,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 17,
+    "prompt_ms": 0.0,
+    "prompt_n": 47,
+    "retries": 0,
+    "slot": 0,
+    "step": 2,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.0011347510667181863,
+    "step": 2,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 97,
+    "step": 2,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_end"
+   },
+   {
+    "kind": "react",
+    "prompt_chars": 3143,
+    "slot": 0,
+    "step": 3,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 754,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 19,
+    "prompt_ms": 0.0,
+    "prompt_n": 31,
+    "retries": 0,
+    "slot": 0,
+    "step": 3,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.0016181931293844164,
+    "step": 3,
+    "task_id": "t0",
+    "tool": "lookup",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 53,
+    "step": 3,
+    "task_id": "t0",
+    "tool": "lookup",
+    "type": "tool_end"
+   },
+   {
+    "kind": "react",
+    "prompt_chars": 3300,
+    "slot": 0,
+    "step": 4,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 805,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 6,
+    "prompt_ms": 0.0,
+    "prompt_n": 20,
+    "retries": 0,
+    "slot": 0,
+    "step": 4,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "kind": "react",
+    "prompt_chars": 3480,
+    "slot": 0,
+    "step": 5,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 831,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 12,
+    "prompt_ms": 0.0,
+    "prompt_n": 38,
+    "retries": 0,
+    "slot": 0,
+    "step": 5,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.004441194179154554,
+    "step": 5,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 117,
+    "step": 5,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_end"
+   },
+   {
+    "kind": "react",
+    "prompt_chars": 3672,
+    "slot": 0,
+    "step": 6,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 882,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 13,
+    "prompt_ms": 0.0,
+    "prompt_n": 36,
+    "retries": 0,
+    "slot": 0,
+    "step": 6,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.0007583464269846739,
+    "step": 6,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 85,
+    "step": 6,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_end"
+   },
+   {
+    "kind": "react",
+    "prompt_chars": 3837,
+    "slot": 0,
+    "step": 7,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 931,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 10,
+    "prompt_ms": 0.0,
+    "prompt_n": 28,
+    "retries": 0,
+    "slot": 0,
+    "step": 7,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "kind": "explain",
+    "prompt_chars": 3891,
+    "slot": 0,
+    "step": 8,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 969,
+    "error": null,
+    "kind": "explain",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 6,
+    "prompt_ms": 0.0,
+    "prompt_n": 3,
+    "retries": 0,
+    "slot": 0,
+    "step": 8,
+    "stop_type": "limit",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   }
+  ],
+  "prompt_chars": [
+   2686,
+   2950,
+   3143,
+   3300,
+   3480,
+   3672,
+   3837,
+   3891
+  ],
+  "prompts": [
+   "612485a849d2239e0c4f3a0d2ea17c6ffb27ab1f4c3a4f21ff750b23fb331285",
+   "815ad25dc372ebad7fd85bc1da2067dc2f7beab9b1848a0bfcb0613271644ec0",
+   "d7ce552b059a2c548b234231a1230757bc3624ab7d6c53c7f5655f519136d483",
+   "810723745176e20f28d01e4661b34473cd1a9e323059ec47af3cc99582663294",
+   "8b79487d0e613544cf56c17ca13255756798c045bbf96a8993e495dd83a4a499",
+   "3edfc8c312b663b4a01e0ac96f8030698bcc12461f17ef8f4272d2eea872b4b6",
+   "f81188d5ce9bc7e4ce7bb3bf742ab5135ae69ad70dc27185caf2302510627cff",
+   "3289b56abf0c8a54f2442cfa2e05625a19ea6081a3ed47de00571807cf193653"
+  ],
+  "trace": {
+   "error": null,
+   "prediction": "yes",
+   "profile": "mixed",
+   "qid": "q1",
+   "qtype": "comparison",
+   "segments": [
+    [
+     "shared_prefix",
+     "<|im_start|>system\nSolve a question answering task by interleaving Thought, Action and Observation steps.\nThought reasons about the current situation. Action is one of three types:\n(1) search[entity]: returns the first sentences of the Wikipedia paragraph about entity if it exists. If not, it returns the closest full-text search result and lists similar titles.\n(2) lookup[keyword]: returns the next sentence containing keyword in the paragraph you searched last.\n(3) finish[answer]: returns the answer and finishes the task. The answer is a short phrase taken from the observations, or yes/no.\nEach step is exactly one Thought line and one Action line. Then stop and wait for the Observation.\n\nAfter the finish action, write an Explanation: a detailed explanation of 150 to 250 words that walks through the evidence from the observations and shows how it leads to the answer.\n\nHere are some examples.\n\nQuestion: The director of the film Jaws was born in which city?\nThought 1: I need to find who directed Jaws, then find where that person was born.\nAction 1: search[Jaws (film)]\nObservation 1: [Jaws (film)] Jaws is a 1975 American thriller film directed by Steven Spielberg and based on the 1974 novel by Peter Benchley. It stars Roy Scheider as police chief Martin Brody.\nThought 2: Jaws was directed by Steven Spielberg. Now I need his birthplace.\nAction 2: search[Steven Spielberg]\nObservation 2: [Steven Spielberg] Steven Allan Spielberg (born December 18, 1946) is an American filmmaker. He was born in Cincinnati, Ohio, and grew up in New Jersey, Arizona and California.\nThought 3: Steven Spielberg was born in Cincinnati, Ohio.\nAction 3: finish[Cincinnati]\nExplanation: Jaws was directed by Steven Spielberg, and his paragraph says he was born in Cincinnati, Ohio.\n\nQuestion: Are Kraftwerk and Daft Punk from the same country?\nThought 1: I need the country of Kraftwerk and the country of Daft Punk.\nAction 1: search[Kraftwerk]\nObservation 1: [Kraftwerk] Kraftwerk is a German electronic band formed in Düsseldorf in 1970 by Ralf Hütter and Florian Schneider.\nThought 2: Kraftwerk is German. Now Daft Punk.\nAction 2: search[Daft Punk]\nObservation 2: [Daft Punk] Daft Punk were a French electronic music duo formed in Paris in 1993 by Thomas Bangalter and Guy-Manuel de Homem-Christo.\nThought 3: Kraftwerk is from Germany and Daft Punk is from France, so they are not from the same country.\nAction 3: finish[no]\nExplanation: Kraftwerk is described as a German band formed in Düsseldorf, while Daft Punk were a French duo formed in Paris.<|im_end|>\n<|im_start|>user\nQuestion: "
+    ],
+    [
+     "question",
+     "Were Scott Derrickson and Ed Wood of the same nationality?"
+    ],
+    [
+     "control",
+     "<|im_end|>\n<|im_start|>assistant\nThought 1:"
+    ],
+    [
+     "thought_action",
+     " I need Scott Derrickson's nationality.\nAction 1: search[Scott Derrickson]"
+    ],
+    [
+     "control",
+     "\nObservation 1: "
+    ],
+    [
+     "obs_meta",
+     "[Scott Derrickson] "
+    ],
+    [
+     "obs_sf",
+     "Scott Derrickson (born July 16, 1966) is an American director."
+    ],
+    [
+     "obs_other",
+     " He lives in Los Angeles, California."
+    ],
+    [
+     "obs_other",
+     " He is best known for directing horror films."
+    ],
+    [
+     "control",
+     "\nThought 2:"
+    ],
+    [
+     "thought_action",
+     " He is American, born in 1966. Now Ed Wood.\nAction 2: search[Ed Wood]"
+    ],
+    [
+     "control",
+     "\nObservation 2: "
+    ],
+    [
+     "obs_meta",
+     "[Ed Wood] "
+    ],
+    [
+     "obs_sf",
+     "Edward Davis Wood Jr. was an American filmmaker."
+    ],
+    [
+     "obs_other",
+     " He was born in Poughkeepsie, New York."
+    ],
+    [
+     "control",
+     "\nThought 3:"
+    ],
+    [
+     "thought_action",
+     " Ed Wood was an American filmmaker. Where was he born?\nAction 3: lookup[born]"
+    ],
+    [
+     "control",
+     "\nObservation 3: "
+    ],
+    [
+     "obs_meta",
+     "(Result 1 / 1) "
+    ],
+    [
+     "obs_other",
+     "He was born in Poughkeepsie, New York."
+    ],
+    [
+     "control",
+     "\nThought 4:"
+    ],
+    [
+     "thought_action",
+     " I am not sure what to do."
+    ],
+    [
+     "control",
+     "\nObservation 4: "
+    ],
+    [
+     "obs_meta",
+     "Invalid format. Write one Thought line, then one Action line such as Action: search[entity], lookup[keyword] or finish[answer]."
+    ],
+    [
+     "control",
+     "\nThought 5:"
+    ],
+    [
+     "thought_action",
+     " Try another search.\nAction 5: search[Zzzz Qqqq]"
+    ],
+    [
+     "control",
+     "\nObservation 5: "
+    ],
+    [
+     "obs_meta",
+     "Could not find [Zzzz Qqqq]. Similar: ['Doctor Strange (2016 film)', 'Ed Wood', 'Scott Derrickson', 'Ed Wood (film)']."
+    ],
+    [
+     "control",
+     "\nThought 6:"
+    ],
+    [
+     "thought_action",
+     " Check the film too.\nAction 6: search[Ed Wood (film)]"
+    ],
+    [
+     "control",
+     "\nObservation 6: "
+    ],
+    [
+     "obs_meta",
+     "[Ed Wood (film)] "
+    ],
+    [
+     "obs_other",
+     "Ed Wood is a 1994 American biographical film directed by Tim Burton."
+    ],
+    [
+     "control",
+     "\nThought 7:"
+    ],
+    [
+     "thought_action",
+     " Both are American.\nAction 7: finish[yes]"
+    ],
+    [
+     "control",
+     "\nExplanation:"
+    ],
+    [
+     "thought_action",
+     " Because.xxxxxxxxxxxxxxx"
+    ]
+   ],
+   "sf_seen": [
+    [
+     "Ed Wood",
+     0
+    ],
+    [
+     "Scott Derrickson",
+     0
+    ]
+   ],
+   "slot": 0,
+   "status": "ok",
+   "steps": [
+    {
+     "action": "search",
+     "arg": "Scott Derrickson",
+     "kind": "react",
+     "llm": {
+      "cache_n": 0,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 18,
+      "prompt_ms": 0.0,
+      "prompt_n": 671,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "word",
+      "truncated": false
+     },
+     "obs_chars": 163,
+     "output": " I need Scott Derrickson's nationality.\nAction 1: search[Scott Derrickson]",
+     "step": 1,
+     "tool_delay_s": 0.0006689004027382036
+    },
+    {
+     "action": "search",
+     "arg": "Ed Wood",
+     "kind": "react",
+     "llm": {
+      "cache_n": 690,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 17,
+      "prompt_ms": 0.0,
+      "prompt_n": 47,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 97,
+     "output": " He is American, born in 1966. Now Ed Wood.\nAction 2: search[Ed Wood]",
+     "step": 2,
+     "tool_delay_s": 0.0011347510667181863
+    },
+    {
+     "action": "lookup",
+     "arg": "born",
+     "kind": "react",
+     "llm": {
+      "cache_n": 754,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 19,
+      "prompt_ms": 0.0,
+      "prompt_n": 31,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 53,
+     "output": " Ed Wood was an American filmmaker. Where was he born?\nAction 3: lookup[born]",
+     "step": 3,
+     "tool_delay_s": 0.0016181931293844164
+    },
+    {
+     "action": null,
+     "arg": null,
+     "kind": "react",
+     "llm": {
+      "cache_n": 805,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 6,
+      "prompt_ms": 0.0,
+      "prompt_n": 20,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 0,
+     "output": " I am not sure what to do.",
+     "step": 4,
+     "tool_delay_s": 0.0
+    },
+    {
+     "action": "search",
+     "arg": "Zzzz Qqqq",
+     "kind": "react",
+     "llm": {
+      "cache_n": 831,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 12,
+      "prompt_ms": 0.0,
+      "prompt_n": 38,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 117,
+     "output": " Try another search.\nAction 5: search[Zzzz Qqqq]",
+     "step": 5,
+     "tool_delay_s": 0.004441194179154554
+    },
+    {
+     "action": "search",
+     "arg": "Ed Wood (film)",
+     "kind": "react",
+     "llm": {
+      "cache_n": 882,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 13,
+      "prompt_ms": 0.0,
+      "prompt_n": 36,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 85,
+     "output": " Check the film too.\nAction 6: search[Ed Wood (film)]",
+     "step": 6,
+     "tool_delay_s": 0.0007583464269846739
+    },
+    {
+     "action": "finish",
+     "arg": "yes",
+     "kind": "react",
+     "llm": {
+      "cache_n": 931,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 10,
+      "prompt_ms": 0.0,
+      "prompt_n": 28,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 0,
+     "output": " Both are American.\nAction 7: finish[yes]",
+     "step": 7,
+     "tool_delay_s": 0.0
+    },
+    {
+     "action": null,
+     "arg": null,
+     "kind": "explain",
+     "llm": {
+      "cache_n": 969,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 6,
+      "prompt_ms": 0.0,
+      "prompt_n": 3,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "limit",
+      "truncated": false
+     },
+     "obs_chars": 0,
+     "output": " Because.xxxxxxxxxxxxxxx",
+     "step": 8,
+     "tool_delay_s": 0.0
+    }
+   ],
+   "task_id": "t0"
+  }
+ },
+ "oneshot": {
+  "events": [
+   {
+    "kind": "oneshot",
+    "prompt_chars": 741,
+    "slot": 0,
+    "step": 1,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 0,
+    "error": null,
+    "kind": "oneshot",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 10,
+    "prompt_ms": 0.0,
+    "prompt_n": 185,
+    "retries": 0,
+    "slot": 0,
+    "step": 1,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   }
+  ],
+  "prompt_chars": [
+   741
+  ],
+  "prompts": [
+   "a39497c45031689e1e4c76c7c1b104b5c8b2c9dc5985dc1e0d43860099f69c28"
+  ],
+  "trace": {
+   "error": null,
+   "prediction": "yes",
+   "profile": "o",
+   "qid": "q1",
+   "qtype": "comparison",
+   "segments": [
+    [
+     "shared_prefix",
+     "<|im_start|>system\nAnswer the question using the Wikipedia paragraphs given with it.\nWrite one Thought line with your reasoning, then one Action line of the form finish[answer].\nThe answer is a short phrase taken from the paragraphs, or yes/no.<|im_end|>\n<|im_start|>user\nContext:\n"
+    ],
+    [
+     "obs_meta",
+     "[Scott Derrickson] "
+    ],
+    [
+     "obs_sf",
+     "Scott Derrickson (born July 16, 1966) is an American director."
+    ],
+    [
+     "obs_other",
+     " He lives in Los Angeles, California."
+    ],
+    [
+     "obs_other",
+     " He is best known for directing horror films."
+    ],
+    [
+     "obs_meta",
+     "\n"
+    ],
+    [
+     "obs_meta",
+     "[Ed Wood] "
+    ],
+    [
+     "obs_sf",
+     "Edward Davis Wood Jr. was an American filmmaker."
+    ],
+    [
+     "obs_other",
+     " He was born in Poughkeepsie, New York."
+    ],
+    [
+     "obs_meta",
+     "\n"
+    ],
+    [
+     "obs_meta",
+     "[Ed Wood (film)] "
+    ],
+    [
+     "obs_other",
+     "Ed Wood is a 1994 American biographical film directed by Tim Burton."
+    ],
+    [
+     "obs_meta",
+     "\n"
+    ],
+    [
+     "control",
+     "\nQuestion: "
+    ],
+    [
+     "question",
+     "Were Scott Derrickson and Ed Wood of the same nationality?"
+    ],
+    [
+     "control",
+     "<|im_end|>\n<|im_start|>assistant\nThought 1:"
+    ],
+    [
+     "thought_action",
+     " Both are American.\nAction 1: finish[yes]"
+    ]
+   ],
+   "sf_seen": [
+    [
+     "Ed Wood",
+     0
+    ],
+    [
+     "Scott Derrickson",
+     0
+    ]
+   ],
+   "slot": 0,
+   "status": "ok",
+   "steps": [
+    {
+     "action": "finish",
+     "arg": "yes",
+     "kind": "oneshot",
+     "llm": {
+      "cache_n": 0,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 10,
+      "prompt_ms": 0.0,
+      "prompt_n": 185,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 0,
+     "output": " Both are American.\nAction 1: finish[yes]",
+     "step": 1,
+     "tool_delay_s": 0.0
+    }
+   ],
+   "task_id": "t0"
+  }
+ },
+ "parse_fail": {
+  "events": [
+   {
+    "kind": "react",
+    "prompt_chars": 1623,
+    "slot": 0,
+    "step": 1,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 0,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 3,
+    "prompt_ms": 0.0,
+    "prompt_n": 405,
+    "retries": 0,
+    "slot": 0,
+    "step": 1,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "kind": "forced_finish",
+    "prompt_chars": 1843,
+    "slot": 0,
+    "step": 2,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 409,
+    "error": null,
+    "kind": "forced_finish",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 1,
+    "prompt_ms": 0.0,
+    "prompt_n": 51,
+    "retries": 0,
+    "slot": 0,
+    "step": 2,
+    "stop_type": "word",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   }
+  ],
+  "prompt_chars": [
+   1623,
+   1843
+  ],
+  "prompts": [
+   "5109cec093a26f69401ee2bf4a44843643d13692f24380ccd63a5a1829f1b37b",
+   "ec452f4ed94df177428d8c4fa0373e2ecf4f7b2255f1444506b6b40563a83354"
+  ],
+  "trace": {
+   "error": null,
+   "prediction": "Ed Wood",
+   "profile": "pf",
+   "qid": "q1",
+   "qtype": "comparison",
+   "segments": [
+    [
+     "shared_prefix",
+     "<|im_start|>system\nSolve a question answering task by interleaving Thought, Action and Observation steps.\nThought reasons about the current situation. Action is one of three types:\n(1) search[entity]: returns the first sentences of the Wikipedia paragraph about entity if it exists. If not, it returns the closest full-text search result and lists similar titles.\n(2) lookup[keyword]: returns the next sentence containing keyword in the paragraph you searched last.\n(3) finish[answer]: returns the answer and finishes the task. The answer is a short phrase taken from the observations, or yes/no.\nEach step is exactly one Thought line and one Action line. Then stop and wait for the Observation.\n\nHere are some examples.\n\nQuestion: The director of the film Jaws was born in which city?\nThought 1: I need to find who directed Jaws, then find where that person was born.\nAction 1: search[Jaws (film)]\nObservation 1: [Jaws (film)] Jaws is a 1975 American thriller film directed by Steven Spielberg and based on the 1974 novel by Peter Benchley. It stars Roy Scheider as police chief Martin Brody.\nThought 2: Jaws was directed by Steven Spielberg. Now I need his birthplace.\nAction 2: search[Steven Spielberg]\nObservation 2: [Steven Spielberg] Steven Allan Spielberg (born December 18, 1946) is an American filmmaker. He was born in Cincinnati, Ohio, and grew up in New Jersey, Arizona and California.\nThought 3: Steven Spielberg was born in Cincinnati, Ohio.\nAction 3: finish[Cincinnati]<|im_end|>\n<|im_start|>user\nQuestion: "
+    ],
+    [
+     "question",
+     "Were Scott Derrickson and Ed Wood of the same nationality?"
+    ],
+    [
+     "control",
+     "<|im_end|>\n<|im_start|>assistant\nThought 1:"
+    ],
+    [
+     "thought_action",
+     " I am confused."
+    ],
+    [
+     "control",
+     "\nObservation 1: "
+    ],
+    [
+     "obs_meta",
+     "Invalid format. Write one Thought line, then one Action line such as Action: search[entity], lookup[keyword] or finish[answer]."
+    ],
+    [
+     "control",
+     "\nThought 2: I must give my final answer now.\nAction 2: finish["
+    ],
+    [
+     "thought_action",
+     "Ed Wood"
+    ],
+    [
+     "control",
+     "]"
+    ]
+   ],
+   "sf_seen": [],
+   "slot": 0,
+   "status": "parse_fail",
+   "steps": [
+    {
+     "action": null,
+     "arg": null,
+     "kind": "react",
+     "llm": {
+      "cache_n": 0,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 3,
+      "prompt_ms": 0.0,
+      "prompt_n": 405,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 0,
+     "output": " I am confused.",
+     "step": 1,
+     "tool_delay_s": 0.0
+    },
+    {
+     "action": "finish",
+     "arg": "Ed Wood",
+     "kind": "forced_finish",
+     "llm": {
+      "cache_n": 409,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 1,
+      "prompt_ms": 0.0,
+      "prompt_n": 51,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "word",
+      "truncated": false
+     },
+     "obs_chars": 0,
+     "output": "Ed Wood",
+     "step": 2,
+     "tool_delay_s": 0.0
+    }
+   ],
+   "task_id": "t0"
+  }
+ },
+ "searches_finish": {
+  "events": [
+   {
+    "kind": "react",
+    "prompt_chars": 1623,
+    "slot": 0,
+    "step": 1,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 0,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 15,
+    "prompt_ms": 0.0,
+    "prompt_n": 405,
+    "retries": 0,
+    "slot": 0,
+    "step": 1,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.0,
+    "step": 1,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 163,
+    "step": 1,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_end"
+   },
+   {
+    "kind": "react",
+    "prompt_chars": 1873,
+    "slot": 0,
+    "step": 2,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 420,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 13,
+    "prompt_ms": 0.0,
+    "prompt_n": 47,
+    "retries": 0,
+    "slot": 0,
+    "step": 2,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.0,
+    "step": 2,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 97,
+    "step": 2,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_end"
+   },
+   {
+    "kind": "react",
+    "prompt_chars": 2052,
+    "slot": 0,
+    "step": 3,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 482,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 17,
+    "prompt_ms": 0.0,
+    "prompt_n": 31,
+    "retries": 0,
+    "slot": 0,
+    "step": 3,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.0,
+    "step": 3,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 98,
+    "step": 3,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_end"
+   },
+   {
+    "kind": "react",
+    "prompt_chars": 2246,
+    "slot": 0,
+    "step": 4,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 530,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 19,
+    "prompt_ms": 0.0,
+    "prompt_n": 31,
+    "retries": 0,
+    "slot": 0,
+    "step": 4,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.0,
+    "step": 4,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 85,
+    "step": 4,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_end"
+   },
+   {
+    "kind": "react",
+    "prompt_chars": 2434,
+    "slot": 0,
+    "step": 5,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 580,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 6,
+    "prompt_ms": 0.0,
+    "prompt_n": 28,
+    "retries": 0,
+    "slot": 0,
+    "step": 5,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   }
+  ],
+  "prompt_chars": [
+   1623,
+   1873,
+   2052,
+   2246,
+   2434
+  ],
+  "prompts": [
+   "5109cec093a26f69401ee2bf4a44843643d13692f24380ccd63a5a1829f1b37b",
+   "3940805c063d6e4029531a4ad1a0a10945325be1ddd3dc1e7649fc85dd96e1cd",
+   "47529291443b6ab6c172bb7da9d5bebe49e5b1ad6cf00e1bb4bd6f80a97b610d",
+   "3c9db9500d826c63d092be6f2a07a538b9fd2a51e23df85bfd70208cce8b6a38",
+   "697b1b0507f587d045fd2e6efeba11d4c2441b40e60d8a2c9d6c18f7f90a611d"
+  ],
+  "trace": {
+   "error": null,
+   "prediction": "yes",
+   "profile": "short",
+   "qid": "q1",
+   "qtype": "comparison",
+   "segments": [
+    [
+     "shared_prefix",
+     "<|im_start|>system\nSolve a question answering task by interleaving Thought, Action and Observation steps.\nThought reasons about the current situation. Action is one of three types:\n(1) search[entity]: returns the first sentences of the Wikipedia paragraph about entity if it exists. If not, it returns the closest full-text search result and lists similar titles.\n(2) lookup[keyword]: returns the next sentence containing keyword in the paragraph you searched last.\n(3) finish[answer]: returns the answer and finishes the task. The answer is a short phrase taken from the observations, or yes/no.\nEach step is exactly one Thought line and one Action line. Then stop and wait for the Observation.\n\nHere are some examples.\n\nQuestion: The director of the film Jaws was born in which city?\nThought 1: I need to find who directed Jaws, then find where that person was born.\nAction 1: search[Jaws (film)]\nObservation 1: [Jaws (film)] Jaws is a 1975 American thriller film directed by Steven Spielberg and based on the 1974 novel by Peter Benchley. It stars Roy Scheider as police chief Martin Brody.\nThought 2: Jaws was directed by Steven Spielberg. Now I need his birthplace.\nAction 2: search[Steven Spielberg]\nObservation 2: [Steven Spielberg] Steven Allan Spielberg (born December 18, 1946) is an American filmmaker. He was born in Cincinnati, Ohio, and grew up in New Jersey, Arizona and California.\nThought 3: Steven Spielberg was born in Cincinnati, Ohio.\nAction 3: finish[Cincinnati]<|im_end|>\n<|im_start|>user\nQuestion: "
+    ],
+    [
+     "question",
+     "Were Scott Derrickson and Ed Wood of the same nationality?"
+    ],
+    [
+     "control",
+     "<|im_end|>\n<|im_start|>assistant\nThought 1:"
+    ],
+    [
+     "thought_action",
+     " I need Scott Derrickson.\nAction 1: search[Scott Derrickson]"
+    ],
+    [
+     "control",
+     "\nObservation 1: "
+    ],
+    [
+     "obs_meta",
+     "[Scott Derrickson] "
+    ],
+    [
+     "obs_sf",
+     "Scott Derrickson (born July 16, 1966) is an American director."
+    ],
+    [
+     "obs_other",
+     " He lives in Los Angeles, California."
+    ],
+    [
+     "obs_other",
+     " He is best known for directing horror films."
+    ],
+    [
+     "control",
+     "\nThought 2:"
+    ],
+    [
+     "thought_action",
+     " He is American. Now Ed Wood.\nAction 2: search[Ed Wood]"
+    ],
+    [
+     "control",
+     "\nObservation 2: "
+    ],
+    [
+     "obs_meta",
+     "[Ed Wood] "
+    ],
+    [
+     "obs_sf",
+     "Edward Davis Wood Jr. was an American filmmaker."
+    ],
+    [
+     "obs_other",
+     " He was born in Poughkeepsie, New York."
+    ],
+    [
+     "control",
+     "\nThought 3:"
+    ],
+    [
+     "thought_action",
+     " Ed Wood was American. And the film.\nAction 3: search[Doctor Strange]"
+    ],
+    [
+     "control",
+     "\nObservation 3: "
+    ],
+    [
+     "obs_meta",
+     "[Doctor Strange (2016 film)] "
+    ],
+    [
+     "obs_other",
+     "Doctor Strange is a 2016 superhero film directed by Scott Derrickson."
+    ],
+    [
+     "control",
+     "\nThought 4:"
+    ],
+    [
+     "thought_action",
+     " The film was directed by Scott Derrickson.\nAction 4: search[Ed Wood (film)]"
+    ],
+    [
+     "control",
+     "\nObservation 4: "
+    ],
+    [
+     "obs_meta",
+     "[Ed Wood (film)] "
+    ],
+    [
+     "obs_other",
+     "Ed Wood is a 1994 American biographical film directed by Tim Burton."
+    ],
+    [
+     "control",
+     "\nThought 5:"
+    ],
+    [
+     "thought_action",
+     " Done.\nAction: finish[yes]"
+    ]
+   ],
+   "sf_seen": [
+    [
+     "Ed Wood",
+     0
+    ],
+    [
+     "Scott Derrickson",
+     0
+    ]
+   ],
+   "slot": 0,
+   "status": "ok",
+   "steps": [
+    {
+     "action": "search",
+     "arg": "Scott Derrickson",
+     "kind": "react",
+     "llm": {
+      "cache_n": 0,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 15,
+      "prompt_ms": 0.0,
+      "prompt_n": 405,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 163,
+     "output": " I need Scott Derrickson.\nAction 1: search[Scott Derrickson]",
+     "step": 1,
+     "tool_delay_s": 0.0
+    },
+    {
+     "action": "search",
+     "arg": "Ed Wood",
+     "kind": "react",
+     "llm": {
+      "cache_n": 420,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 13,
+      "prompt_ms": 0.0,
+      "prompt_n": 47,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 97,
+     "output": " He is American. Now Ed Wood.\nAction 2: search[Ed Wood]",
+     "step": 2,
+     "tool_delay_s": 0.0
+    },
+    {
+     "action": "search",
+     "arg": "Doctor Strange",
+     "kind": "react",
+     "llm": {
+      "cache_n": 482,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 17,
+      "prompt_ms": 0.0,
+      "prompt_n": 31,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 98,
+     "output": " Ed Wood was American. And the film.\nAction 3: search[Doctor Strange]",
+     "step": 3,
+     "tool_delay_s": 0.0
+    },
+    {
+     "action": "search",
+     "arg": "Ed Wood (film)",
+     "kind": "react",
+     "llm": {
+      "cache_n": 530,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 19,
+      "prompt_ms": 0.0,
+      "prompt_n": 31,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 85,
+     "output": " The film was directed by Scott Derrickson.\nAction 4: search[Ed Wood (film)]",
+     "step": 4,
+     "tool_delay_s": 0.0
+    },
+    {
+     "action": "finish",
+     "arg": "yes",
+     "kind": "react",
+     "llm": {
+      "cache_n": 580,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 6,
+      "prompt_ms": 0.0,
+      "prompt_n": 28,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 0,
+     "output": " Done.\nAction: finish[yes]",
+     "step": 5,
+     "tool_delay_s": 0.0
+    }
+   ],
+   "task_id": "t0"
+  }
+ },
+ "whole_paragraphs_forced_explain": {
+  "events": [
+   {
+    "kind": "react",
+    "prompt_chars": 1914,
+    "slot": 0,
+    "step": 1,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 0,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 15,
+    "prompt_ms": 0.0,
+    "prompt_n": 478,
+    "retries": 0,
+    "slot": 0,
+    "step": 1,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.0,
+    "step": 1,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 163,
+    "step": 1,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_end"
+   },
+   {
+    "kind": "react",
+    "prompt_chars": 2164,
+    "slot": 0,
+    "step": 2,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 493,
+    "error": null,
+    "kind": "react",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 13,
+    "prompt_ms": 0.0,
+    "prompt_n": 47,
+    "retries": 0,
+    "slot": 0,
+    "step": 2,
+    "stop_type": "eos",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "delay_s": 0.0,
+    "step": 2,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_start"
+   },
+   {
+    "obs_chars": 97,
+    "step": 2,
+    "task_id": "t0",
+    "tool": "search",
+    "type": "tool_end"
+   },
+   {
+    "kind": "forced_finish",
+    "prompt_chars": 2394,
+    "slot": 0,
+    "step": 3,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 554,
+    "error": null,
+    "kind": "forced_finish",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 1,
+    "prompt_ms": 0.0,
+    "prompt_n": 43,
+    "retries": 0,
+    "slot": 0,
+    "step": 3,
+    "stop_type": "word",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   },
+   {
+    "kind": "explain",
+    "prompt_chars": 2415,
+    "slot": 0,
+    "step": 4,
+    "task_id": "t0",
+    "type": "req_start"
+   },
+   {
+    "cache_n": 600,
+    "error": null,
+    "kind": "explain",
+    "ok": true,
+    "predicted_ms": 0.0,
+    "predicted_n": 4,
+    "prompt_ms": 0.0,
+    "prompt_n": 3,
+    "retries": 0,
+    "slot": 0,
+    "step": 4,
+    "stop_type": "limit",
+    "task_id": "t0",
+    "truncated": false,
+    "type": "req_end"
+   }
+  ],
+  "prompt_chars": [
+   1914,
+   2164,
+   2394,
+   2415
+  ],
+  "prompts": [
+   "c705b7a82cd8e97a15ae832a4c544b218127508df10c51187c7da08b5d96d465",
+   "d3ea10de29481bf07e90cb352867b823f87562d0e00659c66c822aff92e0e42b",
+   "3f50d09cd2c2f599bd74f7d7610be71bf2d0c1084817cebcab831e7524586b23",
+   "8cedcea5b9178803169e4c1381e71f4b34a017537afcc33182fcdbe938036e9a"
+  ],
+  "trace": {
+   "error": null,
+   "prediction": "Ed Wood",
+   "profile": "long",
+   "qid": "q1",
+   "qtype": "comparison",
+   "segments": [
+    [
+     "shared_prefix",
+     "<|im_start|>system\nSolve a question answering task by interleaving Thought, Action and Observation steps.\nThought reasons about the current situation. Action is one of three types:\n(1) search[entity]: returns the first sentences of the Wikipedia paragraph about entity if it exists. If not, it returns the closest full-text search result and lists similar titles.\n(2) lookup[keyword]: returns the next sentence containing keyword in the paragraph you searched last.\n(3) finish[answer]: returns the answer and finishes the task. The answer is a short phrase taken from the observations, or yes/no.\nEach step is exactly one Thought line and one Action line. Then stop and wait for the Observation.\n\nAfter the finish action, write an Explanation: a detailed explanation of 150 to 250 words that walks through the evidence from the observations and shows how it leads to the answer.\n\nHere are some examples.\n\nQuestion: The director of the film Jaws was born in which city?\nThought 1: I need to find who directed Jaws, then find where that person was born.\nAction 1: search[Jaws (film)]\nObservation 1: [Jaws (film)] Jaws is a 1975 American thriller film directed by Steven Spielberg and based on the 1974 novel by Peter Benchley. It stars Roy Scheider as police chief Martin Brody.\nThought 2: Jaws was directed by Steven Spielberg. Now I need his birthplace.\nAction 2: search[Steven Spielberg]\nObservation 2: [Steven Spielberg] Steven Allan Spielberg (born December 18, 1946) is an American filmmaker. He was born in Cincinnati, Ohio, and grew up in New Jersey, Arizona and California.\nThought 3: Steven Spielberg was born in Cincinnati, Ohio.\nAction 3: finish[Cincinnati]\nExplanation: Jaws was directed by Steven Spielberg, and his paragraph says he was born in Cincinnati, Ohio.<|im_end|>\n<|im_start|>user\nQuestion: "
+    ],
+    [
+     "question",
+     "Were Scott Derrickson and Ed Wood of the same nationality?"
+    ],
+    [
+     "control",
+     "<|im_end|>\n<|im_start|>assistant\nThought 1:"
+    ],
+    [
+     "thought_action",
+     " I need Scott Derrickson.\nAction 1: search[Scott Derrickson]"
+    ],
+    [
+     "control",
+     "\nObservation 1: "
+    ],
+    [
+     "obs_meta",
+     "[Scott Derrickson] "
+    ],
+    [
+     "obs_sf",
+     "Scott Derrickson (born July 16, 1966) is an American director."
+    ],
+    [
+     "obs_other",
+     " He lives in Los Angeles, California."
+    ],
+    [
+     "obs_other",
+     " He is best known for directing horror films."
+    ],
+    [
+     "control",
+     "\nThought 2:"
+    ],
+    [
+     "thought_action",
+     " He is American. Now Ed Wood.\nAction 2: search[Ed Wood]"
+    ],
+    [
+     "control",
+     "\nObservation 2: "
+    ],
+    [
+     "obs_meta",
+     "[Ed Wood] "
+    ],
+    [
+     "obs_sf",
+     "Edward Davis Wood Jr. was an American filmmaker."
+    ],
+    [
+     "obs_other",
+     " He was born in Poughkeepsie, New York."
+    ],
+    [
+     "control",
+     "\nThought 3: I must give my final answer now.\nAction 3: finish["
+    ],
+    [
+     "thought_action",
+     "Ed Wood"
+    ],
+    [
+     "control",
+     "]"
+    ],
+    [
+     "control",
+     "\nExplanation:"
+    ],
+    [
+     "thought_action",
+     " Because.xxxxxxx"
+    ]
+   ],
+   "sf_seen": [
+    [
+     "Ed Wood",
+     0
+    ],
+    [
+     "Scott Derrickson",
+     0
+    ]
+   ],
+   "slot": 0,
+   "status": "forced",
+   "steps": [
+    {
+     "action": "search",
+     "arg": "Scott Derrickson",
+     "kind": "react",
+     "llm": {
+      "cache_n": 0,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 15,
+      "prompt_ms": 0.0,
+      "prompt_n": 478,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 163,
+     "output": " I need Scott Derrickson.\nAction 1: search[Scott Derrickson]",
+     "step": 1,
+     "tool_delay_s": 0.0
+    },
+    {
+     "action": "search",
+     "arg": "Ed Wood",
+     "kind": "react",
+     "llm": {
+      "cache_n": 493,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 13,
+      "prompt_ms": 0.0,
+      "prompt_n": 47,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "eos",
+      "truncated": false
+     },
+     "obs_chars": 97,
+     "output": " He is American. Now Ed Wood.\nAction 2: search[Ed Wood]",
+     "step": 2,
+     "tool_delay_s": 0.0
+    },
+    {
+     "action": "finish",
+     "arg": "Ed Wood",
+     "kind": "forced_finish",
+     "llm": {
+      "cache_n": 554,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 1,
+      "prompt_ms": 0.0,
+      "prompt_n": 43,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "word",
+      "truncated": false
+     },
+     "obs_chars": 0,
+     "output": "Ed Wood",
+     "step": 3,
+     "tool_delay_s": 0.0
+    },
+    {
+     "action": null,
+     "arg": null,
+     "kind": "explain",
+     "llm": {
+      "cache_n": 600,
+      "error": null,
+      "ok": true,
+      "predicted_ms": 0.0,
+      "predicted_n": 4,
+      "prompt_ms": 0.0,
+      "prompt_n": 3,
+      "retries": 0,
+      "slot": 0,
+      "stop_type": "limit",
+      "truncated": false
+     },
+     "obs_chars": 0,
+     "output": " Because.xxxxxxx",
+     "step": 4,
+     "tool_delay_s": 0.0
+    }
+   ],
+   "task_id": "t0"
+  }
+ }
+}

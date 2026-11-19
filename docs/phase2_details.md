@@ -959,3 +959,24 @@ the descriptions below match the current files.
   approximate (hatched).
 - `timeline_<point>.png`: GPU KV over time by state at 16k ×4 (dev rep 0) for B1 K = 4, B1 K = 6,
   B2 K = 6, ours and ours_h0.
+
+## 11. Follow-ups for the final report (2026-11-17/18)
+
+Sections 5–7 describe the state when this note was written, with 2 reps at 8k ×1 and 16k ×1 and
+the 2×2 only at 16k ×4. Three follow-ups ran afterwards; `docs/phase2/tables.md` (T3, T4, T7) is
+current and `docs/final/report.tex` uses it.
+
+- **Third rep at 8k ×1 and 16k ×1** (`configs/sweeps/p2f_main_rep3.yaml`, `p2f_ablate_rep3.yaml`).
+  8k ×1: ours 16.31 vs B1 K = 2 12.92, +26.2% (S; was +29.1% at n = 2). 16k ×1: ours vs B1 K = 5
+  is now −6.1% and S (Welch p = 0.01, steady CI [−6.52, −0.18]): B1 K = 5 is faster while losing
+  7.5% of its tasks, so at that point ours' advantage is completion only.
+- **2×2 at 8k ×1** (`p2f_tune_8k.yaml` on perf, `p2f_2x2_8k.yaml` on dev; picks: gated_k K = 3,
+  managed_k K = 3, adm_retain ω = 0.5). Gate with K re-tuned +17.0% (S); lifecycle at fixed K
+  +10.3% (p = 0.04, CI [−0.66, +3.42], n.e.); lifecycle under KV admission +15.9% (p = 0.01, CI
+  [−0.13, +3.88], n.e.); admission −7.0% and −2.2% (n.e.). The best dev cell is managed_k (16.68),
+  as at 16k ×4 (15.18). Every gated cell loses the same ~2 kv_infeasible tasks per run.
+- **Held-out test split** (`p2f_test.yaml`, test_long_500, 500 tasks, 2 reps, knobs frozen): ours
+  vs B1★ +41.4% at 16k ×4 and +17.3% at 8k ×1 (both S); vs B2 +34.6% (S) at 8k ×1 and +17.2% (n.e.)
+  at 16k ×4; vs gated_k +4.8% (n.e.). All six F1 comparisons are within the test margin ±0.03.
+
+Phase 3 (TRIM) is in `docs/phase3_spec.md` §6 and `docs/phase3/tables.md`.

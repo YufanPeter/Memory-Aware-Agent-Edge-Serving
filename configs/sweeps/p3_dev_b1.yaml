@@ -1,0 +1,13 @@
+# Written by scripts/pick_b1.py from the p3_tune runs (Phase 2 tuning rule). B1 at its retuned K
+# on dev, same sweep name as p3_dev.yaml.
+# c16k_d4_b1_oracle: K=4 10.14/min 100.0%, K=6 13.68/min 97.0%, K=8 16.25/min 81.5%, K=10 3.44/min 16.0% -> K=6 (meets 95%)
+# c16k_d4_b1_rel2: K=4 10.53/min 100.0%, K=6 15.27/min 97.0%, K=8 15.79/min 88.5%, K=10 6.17/min 21.5% -> K=6 (meets 95%)
+# c8k_d1_b1_oracle: K=2 13.17/min 100.0%, K=3 16.90/min 91.0%, K=4 10.16/min 30.5%, K=5 1.39/min 3.5% -> K=2 (meets 95%)
+# c8k_d1_b1_rel2: K=2 13.10/min 100.0%, K=3 15.98/min 86.5%, K=4 8.16/min 31.0%, K=5 1.06/min 3.0% -> K=2 (meets 95%)
+name: p3_dev
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 3, policy: observe}
+points:
+- {name: c16k_d4_b1_oracle_k6, ctx: 16384, delay_scale: 4.0, k: 6, trim: oracle, trim_eager: true}
+- {name: c16k_d4_b1_rel2_k6, ctx: 16384, delay_scale: 4.0, k: 6, trim: 'relevance:2', trim_eager: true}
+- {name: c8k_d1_b1_oracle_k2, ctx: 8192, delay_scale: 1.0, k: 2, trim: oracle, trim_eager: true}
+- {name: c8k_d1_b1_rel2_k2, ctx: 8192, delay_scale: 1.0, k: 2, trim: 'relevance:2', trim_eager: true}

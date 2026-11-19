@@ -1,0 +1,17 @@
+# Follow-up: confirmation on the held-out test split (test_long_500: every test question, long
+# mix, t = 0) at the two headline points, all knobs frozen from the perf tuning, 2 reps.
+# Replaces the p1_test.yaml draft (its K / omega were placeholders).
+#   16k x4: B1 K = 4 (tuning pick) and K = 6 (top goodput), B2 K = 6 (896 MiB), gated_k K = 6
+#           (scheduling-only cell of the 2x2), ours omega = 1 (k = 16)
+#   8k x1:  B1 K = 2 (fallback pick), B2 K = 2 (448 MiB), ours omega = 1 (k = 8)
+name: p2_test
+defaults: {workload: workloads/test_long_500.json, parallel: 64, reps: 2, policy: observe}
+points:
+  - {name: c16k_d4_b1_k4, ctx: 16384, delay_scale: 4.0, k: 4}
+  - {name: c16k_d4_ours, ctx: 16384, delay_scale: 4.0, k: 16, policy: ours, kvm: {omega: 1.0}}
+  - {name: c8k_d1_b1_k2, ctx: 8192, delay_scale: 1.0, k: 2}
+  - {name: c8k_d1_ours, ctx: 8192, delay_scale: 1.0, k: 8, policy: ours, kvm: {omega: 1.0}}
+  - {name: c16k_d4_b1_k6, ctx: 16384, delay_scale: 4.0, k: 6}
+  - {name: c16k_d4_b2_k6, ctx: 16384, delay_scale: 4.0, k: 6, cache_ram: 896, pin: false, parallel: k}
+  - {name: c16k_d4_gatedk_k6, ctx: 16384, delay_scale: 4.0, k: 6, policy: gated_k}
+  - {name: c8k_d1_b2_k2, ctx: 8192, delay_scale: 1.0, k: 2, cache_ram: 448, pin: false, parallel: k}

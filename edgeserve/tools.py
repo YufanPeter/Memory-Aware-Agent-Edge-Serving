@@ -42,6 +42,12 @@ class ToolBox:
         self._lookup_hits: list[int] = []
         self._lookup_idx = 0
 
+    @property
+    def current(self) -> str | None:
+        """The page lookup reads (the last search's). TRIM needs it: a lookup result shows one
+        of its sentences without the "[title] " piece."""
+        return self._current
+
     def call(self, name: str, arg: str) -> Observation:
         if name == "search":
             return self.search(arg)

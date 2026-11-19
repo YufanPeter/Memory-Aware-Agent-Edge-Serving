@@ -1,0 +1,12 @@
+# Follow-up: the 2x2 at 8k x1 on dev (dev_long_200, 3 reps), each cell at its perf-tuned knob
+# (p2f_tune_8k.yaml, 1 rep per knob; rule: best goodput among knobs completing >= 95%):
+#   gated_k    K = 2/3/4/5 -> goodput 10.32/11.05/9.54/8.67 (99.5/99.5/100/100%)  => K = 3
+#   managed_k  K = 2/3/4/5 -> goodput 11.74/12.51/11.61/11.02 (98/99/99/98.5%)    => K = 3
+#   adm_retain omega 0.5/1/2 -> 11.35/11.03/8.03 (100/99.5/99%)                   => omega = 0.5
+# B1 (K = 2) and ours (omega = 1) come from p2_main (3 reps after p2f_main_rep3).
+name: p2_2x2
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 3, ctx: 8192, delay_scale: 1.0}
+points:
+  - {name: c8k_d1_gatedk_k3, k: 3, policy: gated_k}
+  - {name: c8k_d1_managedk_k3, k: 3, policy: managed_k}
+  - {name: c8k_d1_admret_w0.5, k: 8, policy: adm_retain, kvm: {omega: 0.5}}

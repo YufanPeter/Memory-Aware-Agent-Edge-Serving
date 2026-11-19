@@ -32,7 +32,9 @@ reuses fewer tokens than its slot held, the server dropped that KV while the slo
 the eviction moment is not observed, so these are upper bounds once evictions happen.
 
 The recompute statistics (evictions, evicted_tokens) come from req_end in both modes: in a
-managed run they count the tokens a drop or erase made the owner re-prefill.
+managed run they count the tokens a drop or erase made the owner re-prefill. A request whose
+prompt TRIM compacted (req_end `trimmed_obs`) finds less cached on purpose: it is counted as a
+trim_followup, never as an eviction.
 
     uv run python -m analysis.kv_timeline results/e1_concurrency/k16/rep0 [--bin 0.5]
 
@@ -95,13 +97,16 @@ def recompute_stats(events: list[dict[str, Any]]) -> dict[str, Any]:
     for ev in events:
         if ev["type"] == "req_end" and ev.get("ok"):
             reqs[ev["task_id"]].append(ev)
-    evicted_tokens = n_evictions = n_followups = 0
+    evicted_tokens = n_evictions = n_followups = n_trim = 0
     by_slot: dict[int, int] = defaultdict(int)
     for rs in reqs.values():
         rs.sort(key=lambda r: r["t_start"])
         for r, nxt in zip(rs, rs[1:], strict=False):
             slot = int(r["slot"])
             if int(nxt["slot"]) != slot:
+                continue
+            if nxt.get("trimmed_obs") is not None:   # TRIM rewrote the prompt: not an eviction
+                n_trim += 1
                 continue
             n_followups += 1
             # The next prompt starts with this request's prompt plus (most of) its output.
@@ -111,9 +116,13 @@ def recompute_stats(events: list[dict[str, Any]]) -> dict[str, Any]:
                 n_evictions += 1
                 evicted_tokens += lost
                 by_slot[slot] += 1
-    return {"followup_requests": n_followups, "evictions": n_evictions, "evicted_tokens": evicted_tokens,
-            "eviction_rate": round(n_evictions / n_followups, 4) if n_followups else None,
-            "evictions_by_slot": dict(sorted(by_slot.items()))}
+    out: dict[str, Any] = {"followup_requests": n_followups, "evictions": n_evictions,
+                           "evicted_tokens": evicted_tokens,
+                           "eviction_rate": round(n_evictions / n_followups, 4) if n_followups else None,
+                           "evictions_by_slot": dict(sorted(by_slot.items()))}
+    if n_trim:
+        out["trim_followups"] = n_trim
+    return out
 
 
 def intervals(events: list[dict[str, Any]]) -> tuple[list[Interval], dict[str, Any]]:

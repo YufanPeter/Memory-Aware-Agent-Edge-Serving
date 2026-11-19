@@ -1,0 +1,23 @@
+# Follow-up (final report): the 2x2 admission x lifecycle decomposition at a second point, 8k x1,
+# to test the lifecycle effect at fixed K where 16k x4 left it not established (+10.8%, CI
+# includes 0). Knobs tuned on perf (p1_long_200), 1 rep each, same rule as p2_tune: the best
+# goodput among knobs completing >= 95% (fallback: highest completion). B1's safe K here is 2
+# (no K reached 95%; K = 3 completed 61%), so the fixed-K grids start at 2.
+#   gated_k    fixed K, active gate, llama.cpp purge:   K = 2, 3, 4, 5
+#   managed_k  fixed K, full gate, managed lifecycle:   K = 2, 3, 4, 5
+#   adm_retain KV admission (k = K_max = 8), active gate, llama.cpp purge: omega 0.5, 1, 2
+# ours at 8k x1 was tuned in p2_tune (omega = 1). Same sweep name as p2_tune.
+name: p2_tune
+defaults: {workload: workloads/p1_long_200.json, parallel: 64, reps: 1, ctx: 8192, delay_scale: 1.0}
+points:
+  - {name: c8k_d1_gatedk_k2, k: 2, policy: gated_k}
+  - {name: c8k_d1_gatedk_k3, k: 3, policy: gated_k}
+  - {name: c8k_d1_gatedk_k4, k: 4, policy: gated_k}
+  - {name: c8k_d1_gatedk_k5, k: 5, policy: gated_k}
+  - {name: c8k_d1_managedk_k2, k: 2, policy: managed_k}
+  - {name: c8k_d1_managedk_k3, k: 3, policy: managed_k}
+  - {name: c8k_d1_managedk_k4, k: 4, policy: managed_k}
+  - {name: c8k_d1_managedk_k5, k: 5, policy: managed_k}
+  - {name: c8k_d1_admret_w0.5, k: 8, policy: adm_retain, kvm: {omega: 0.5}}
+  - {name: c8k_d1_admret_w1, k: 8, policy: adm_retain, kvm: {omega: 1.0}}
+  - {name: c8k_d1_admret_w2, k: 8, policy: adm_retain, kvm: {omega: 2.0}}

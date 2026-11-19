@@ -83,6 +83,7 @@ def test_excluded_first_adm_retain():
     assert R.excluded({"sweep": "p2_tune", "point": "c16k_d4_admret_w1"})
     assert not R.excluded({"sweep": "p2_tune", "point": "c16k_d4_admret_v2_w1"})
     assert not R.excluded({"sweep": "p2_2x2", "point": "c16k_d4_admret_w1"})
+    assert not R.excluded({"sweep": "p2_tune", "point": "c8k_d1_admret_w0.5"})   # 8k x1 ran on the fixed code
 
 
 def cell(k, completion, goodput, cfg="B1"):
@@ -135,16 +136,20 @@ def write_root(root: Path, rows: list[dict]) -> None:
         w.writeheader()
         w.writerows(rows)
     for r in rows:   # per-question F1 needs tasks.jsonl; one task per question
-        write_tasks(root / r["sweep"] / r["point"] / r["rep"], float(r["f1"]), int(r.get("n_failed_tasks", 0)))
+        write_tasks(root / r["sweep"] / r["point"] / r["rep"], float(r["f1"]), int(r.get("n_failed_tasks", 0)),
+                    n=int(r.get("n_task_lines", 20)), half_em=r.get("half_em") == "True")
 
 
-def write_tasks(d: Path, f1: float, n_failed: int = 0, n: int = 20) -> None:
-    """n tasks, the last n_failed of them failed (status ctx_overflow, scored 0)."""
+def write_tasks(d: Path, f1: float, n_failed: int = 0, n: int = 20, half_em: bool = False) -> None:
+    """n tasks, the last n_failed of them failed (status ctx_overflow, scored 0); half_em: only
+    every other answered task is EM-correct, so the steady goodput is half (the bootstrap CI of a
+    Δ against a full-EM run then excludes 0; two full-EM runs give a CI of exactly [0, 0])."""
     d.mkdir(parents=True, exist_ok=True)
     with open(d / "tasks.jsonl", "w", encoding="utf-8", newline="\n") as f:
         for i in range(n):
             bad = i >= n - n_failed
-            f.write(json.dumps({"qid": f"q{i}", "status": "ctx_overflow" if bad else "ok", "em": 0.0 if bad else 1.0,
+            em = 0.0 if bad or (half_em and i % 2) else 1.0
+            f.write(json.dumps({"qid": f"q{i}", "status": "ctx_overflow" if bad else "ok", "em": em,
                                 "f1": 0.0 if bad else f1 + 0.001 * (i % 3), "arrival_s": 0.0,
                                 "latency_s": 10.0 + i, "service_s": 5.0}) + "\n")
 
@@ -202,3 +207,154 @@ def test_report_on_partial_data(tmp_path):
     assert "| ours | B1 K=4 | +25.8 |" in md            # (11.2 - 8.9) / 8.9
     assert "_T5: no ablation runs" in md and "_32k ×4 (p2_main): not run yet._" in md
     assert "eq." in md                                   # F1 TOST row
+
+
+def test_verdict_pval_and_test_margins():
+    """S needs both Welch p < 0.05 and a steady CI that excludes 0; p never prints as 0.00; the
+    test-split TOST names the tightest margin its CI fits in."""
+    ci = {"delta": 1.0, "ci": [0.2, 1.8]}
+    assert R.verdict({"p": 0.01}, ci) == "S"
+    assert R.verdict({"p": 0.01}, {"delta": -1.0, "ci": [-1.8, -0.2]}) == "S"   # a supported loss
+    assert R.verdict({"p": 0.01}, {"delta": 1.0, "ci": [-0.1, 1.8]}) == "n.e."  # CI includes 0
+    assert R.verdict({"p": 0.09}, ci) == "n.e."
+    assert R.verdict({"p": None}, ci) == "n.e." and R.verdict({"p": 0.01}, None) == "n.e."
+    assert R.pval({"p": 0.0042, "n": (3, 3)}) == "0.004 (n 3/3)"
+    assert R.pval({"p": 0.0004, "n": (3, 3)}) == "<0.001 (n 3/3)"
+    assert R.pval({"p": 0.012, "n": (2, 2)}) == "0.01 (n 2/2)"
+    m = (0.03, 0.05)
+    q = {"n": 400, "mean": 0.0, "equivalent": True}
+    assert R.tost_cell({**q, "ci90": [-0.02, 0.02]}, margins=m) == "+0.000 [-0.020, +0.020] eq. (n 400)"
+    assert R.tost_cell({**q, "ci90": [-0.01, 0.04]}, margins=m).endswith("eq. ±0.05 only (n 400)")
+    assert R.tost_cell({**q, "ci90": [-0.01, 0.06]}, margins=m).endswith("not eq. (n 400)")
+
+
+PT = {(16384, 4.0): ("c16k_d4", "16384", "4.0"), (8192, 1.0): ("c8k_d1", "8192", "1.0")}
+
+
+def at(pt, **kw):
+    """A row at one 2x2 point (budget x delay), named <prefix>_<point>."""
+    pre, ctx, delay = PT[pt]
+    kw["point"] = f"{pre}_{kw['point']}"
+    return row(ctx=ctx, delay_scale=delay, **kw)
+
+
+def two_by_two_rows():
+    """Perf tuning, dev 2x2 and p2_main rows at both 2x2 points, plus 16k x4 ablations. At 8k x1
+    managed_k also ran K=8 on perf (not the rule's pick there), and adm_retain beats gated_k on
+    perf, so sched is adm_retain at 8k x1 and gated_k at 16k x4."""
+    perf = {"workload": "p1_long_200", "sweep": "p2_tune", "completed": "200", "status_ctx_overflow": ""}
+    kv = {"admission": "kv"}
+    rows = []
+    # the 16k x4 adm_retain tuning that counts is the post-fix admret_v2 (c16k_d4_admret_w* is excluded)
+    for pt, (k_safe, k_top, k_gate, k_man, gate_g, adm_g, adm_pt) in {
+            (16384, 4.0): (4, 6, 6, 8, "11.5", "10.6", "admret_v2_w0.5"),
+            (8192, 1.0): (2, 3, 3, 3, "11.0", "11.4", "admret_w0.5")}.items():
+        rows += [at(pt, sweep="p0x4_tune", workload="p1_long_200", point=f"b1_k{k_safe}", k=str(k_safe),
+                    completed="196" if k_safe == 4 else "178", goodput_tasks_per_min="8.7"),   # 8k x1: 89%
+                 at(pt, sweep="p0x4_tune", workload="p1_long_200", point=f"b1_k{k_top}", k=str(k_top),
+                    completed="160", goodput_tasks_per_min="10.5"),
+                 at(pt, **perf, policy="gated_k", point=f"gatedk_k{k_safe}", k=str(k_safe), goodput_tasks_per_min="9.0"),
+                 at(pt, **perf, policy="gated_k", point=f"gatedk_k{k_gate}", k=str(k_gate), goodput_tasks_per_min=gate_g),
+                 at(pt, **perf, policy="managed_k", point=f"managedk_k{k_man}", k=str(k_man),
+                    goodput_tasks_per_min="11.68"),
+                 at(pt, **perf, **kv, policy="adm_retain", point=adm_pt, omega="0.5", goodput_tasks_per_min=adm_g),
+                 at(pt, **perf, **kv, policy="ours", point="ours_w1", omega="1.0", goodput_tasks_per_min="11.4")]
+        for rep in ("rep0", "rep1"):
+            dev = {"rep": rep, "completed": "200", "status_ctx_overflow": ""}
+            rows += [at(pt, point=f"b1_k{k_safe}", k=str(k_safe), rep=rep, goodput_tasks_per_min=f"{11 + 0.1 * int(rep[-1])}",
+                        half_em="True"),
+                     at(pt, point=f"b1_k{k_top}", k=str(k_top), rep=rep, goodput_tasks_per_min="13.9", completed="177"),
+                     at(pt, **dev, point="ours", policy="ours", admission="kv", k="16",
+                        goodput_tasks_per_min=f"{14.6 + 0.1 * int(rep[-1])}"),
+                     at(pt, **dev, sweep="p2_2x2", point=f"gatedk_k{k_gate}", policy="gated_k", k=str(k_gate),
+                        goodput_tasks_per_min=f"{13.7 + 0.1 * int(rep[-1])}"),
+                     at(pt, **dev, sweep="p2_2x2", point=f"managedk_k{k_man}", policy="managed_k", k=str(k_man),
+                        goodput_tasks_per_min=f"{15.2 + 0.1 * int(rep[-1])}"),
+                     at(pt, **dev, **kv, sweep="p2_2x2", point="admret_w0.5", policy="adm_retain", omega="0.5",
+                        goodput_tasks_per_min=f"{12.8 + 0.1 * int(rep[-1])}")]
+    eight = (8192, 1.0)   # the 16k x4 tie-break must not carry over: managed_k K=8 is not 8k x1's pick
+    rows.append(at(eight, **perf, policy="managed_k", point="managedk_k8", k="8", goodput_tasks_per_min="11.0"))
+    head = (16384, 4.0)   # ablations at 16k x4: p2_ablate single runs and p2_2x2 follow-up reps
+    rows += [at(head, sweep="p2_ablate", point="lazy", policy="lazy", admission="kv", completed="200",
+                status_ctx_overflow="", goodput_tasks_per_min="14.2"),
+             at(head, sweep="p2_2x2", point="act_offload", policy="act_offload", admission="kv", completed="200",
+                status_ctx_overflow="", goodput_tasks_per_min="15.3")]
+    return rows
+
+
+def test_two_by_two_at_both_points(tmp_path):
+    write_root(tmp_path, two_by_two_rows())
+    runs, dropped = R.load_runs(tmp_path)
+    assert not dropped                                   # c8k_d1_admret_w0.5 in p2_tune is kept
+    cells = R.tuning_cells(runs)
+    head, eight = R.TWO_POINTS
+    chosen, notes = R.dev_2x2(runs, cells, head)
+    assert chosen["managed_k"]["k"] == 8 and any("at 16k ×4, managed_k: K=8 is used" in n for n in notes)
+    chosen, notes = R.dev_2x2(runs, cells, eight)
+    assert (chosen["gated_k"]["k"], chosen["managed_k"]["k"], chosen["adm_retain"]["omega"]) == (3, 3, 0.5)
+    assert all(c["ctx"] == 8192 for c in chosen.values()) and not notes   # rule's picks, no 16k tie-break
+    assert R.sched(R.perf_2x2(cells, head))["cfg"] == "gated_k"
+    assert R.sched(R.perf_2x2(cells, eight))["cfg"] == "adm_retain"
+
+    two, names, cnotes = R.effect_cells(runs, cells, eight)
+    assert two["B1 same K"]["k"] == 3 and two["B1★"]["k"] == 2
+    assert names == {"B1 same K": "B1†", "B1★": "B1★⁻"}  # no B1 K completes 95% on perf here: fallback
+    rows = R.two_by_two(two, 50, names, cnotes)
+    assert [r[0] for r in rows] == ["gate, same K", "gate, K re-tuned", "lifecycle at fixed K",
+                                    "lifecycle at KV admission", "admission, llama.cpp lifecycle",
+                                    "admission, managed lifecycle", "ours vs gated_k"]
+    assert rows[1][1] == "gated_k (K=3) − B1★⁻ (K=2)"
+    assert rows[1][8] == "S"                             # p < 0.05 and B1's half-EM window: CI excludes 0
+    assert rows[2][8] == "n.e."                          # full EM on both sides: the CI is [0, 0]
+    assert "sched on perf is adm_retain" in rows[6][9]
+    assert "gated_k is sched" in R.effect_cells(runs, cells, head)[2]["ours vs gated_k"]
+    two["managed_k"] = None
+    assert R.two_by_two(two, 0, names)[2][-1] == "missing: managed_k"
+
+    md = R.t4(runs, cells, 50)
+    assert md.index("*16k ×4*") < md.index("*8k ×1*")
+    assert md.count("| gate, same K |") == 2 and md.count("| ours vs gated_k |") == 2
+    # T5 is 16k x4 only: the 8k x1 2x2 runs and the 2x2 cells never enter the ablations
+    assert sorted(R.cell_name(c) for c in R.ablation_cells(runs)) == ["act_offload", "lazy"]
+
+
+def test_t7_test_split(tmp_path):
+    """The held-out test table: 500 tasks per run (completion over n_tasks, not 200), 2 reps, ours
+    vs every row with the verdict, the ±0.03 test margin, and none of it leaking into T3."""
+    head, eight = (16384, 4.0), (8192, 1.0)
+    test = {"sweep": "p2_test", "workload": "test_long_500", "n_tasks": "500", "n_task_lines": "500",
+            "status_ctx_overflow": ""}
+    rows = [at(head, sweep="p0x4_tune", workload="p1_long_200", point="b1_k4", completed="196",
+               goodput_tasks_per_min="8.7")]
+    for rep in ("rep0", "rep1"):
+        i = int(rep[-1])
+        rows += [at(head, **test, rep=rep, point="b1_k4", completed="496", f1="0.56", half_em="True",
+                    goodput_tasks_per_min=f"{10.0 + 0.1 * i}"),
+                 at(head, **test, rep=rep, point="gatedk_k6", policy="gated_k", k="6", completed="500", f1="0.60",
+                    goodput_tasks_per_min=f"{13.5 + 0.1 * i}"),
+                 at(head, **test, rep=rep, point="ours", policy="ours", admission="kv", k="16", completed="499",
+                    f1="0.60", goodput_tasks_per_min=f"{14.2 + 0.1 * i}"),
+                 at(eight, **test, rep=rep, point="b1_k2", k="2", completed="475", f1="0.60",
+                    goodput_tasks_per_min=f"{12.8 + 0.1 * i}"),
+                 at(eight, **test, rep=rep, point="ours", policy="ours", admission="kv", k="8", completed="497",
+                    f1="0.60", goodput_tasks_per_min=f"{15.0 + 0.1 * i}")]
+    write_root(tmp_path, rows)
+    runs, _ = R.load_runs(tmp_path)
+    assert not R.main_cells(runs) and not R.ablation_cells(runs)   # test runs are T7's alone
+    assert all(c["split"] == "perf" for c in R.tuning_cells(runs).values())
+    cells = R.test_cells(runs)
+    assert sorted(cells) == [eight, head]
+    b1 = cells[head][0]
+    assert b1["cfg"] == "B1" and b1["n"] == 2 and b1["completion"] == pytest.approx(496 / 500)
+    md = R.t7(runs, R.picks(R.tuning_cells(runs), "B1"), 50)
+    assert "test_long_500; 500 tasks per run, 2 reps" in md
+    assert md.index("*16k ×4*") < md.index("*8k ×1*")
+    assert "| B1★† | K=4 | 2 | 99.2 |" in md
+    # ΔF1 0.04 vs B1 K=4 fits the dev margin only; Welch p < 0.05 and B1's half-EM window: S
+    line = {r.split(" | ")[1]: r for r in md.splitlines() if r.startswith("| ours | ")}
+    assert line["B1 K=4"].startswith("| ours | B1 K=4 | +41.8 | +0.6 |")
+    assert line["B1 K=4"].endswith("eq. ±0.05 only (n 500) | S |")
+    assert line["gated_k K=6"].endswith("eq. (n 500) | n.e. |")   # full EM both sides: CI [0, 0]
+    assert "| B1 K=4 rep1 | rep0 (null) |" in md
+    full = R.report(tmp_path, n_boot=50)
+    assert "## T7" in full and "_T3: no p2_main runs yet._" in full

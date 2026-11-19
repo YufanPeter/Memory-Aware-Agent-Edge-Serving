@@ -3,7 +3,8 @@
 Each task's prompt ledger (tasks.jsonl, trace.segments) is tokenized with the Qwen2.5
 tokenizer and split by segment type: shared prefix (system prompt + few-shot examples),
 question, the model's thoughts/actions, observations that are supporting facts, other
-observation text, observation framing, and template/control tokens.
+observation text, observation framing, TRIM's "…" markers for dropped sentences (obs_trim),
+and template/control tokens.
 
     uv run --with tokenizers python -m analysis.composition results/e1_concurrency/k16/rep0 [...]
       [--tokenizer models/qwen2.5-tokenizer/tokenizer.json]
@@ -20,7 +21,7 @@ from typing import Any
 
 from tokenizers import Tokenizer
 
-KINDS = ["shared_prefix", "question", "thought_action", "obs_sf", "obs_other", "obs_meta", "control"]
+KINDS = ["shared_prefix", "question", "thought_action", "obs_sf", "obs_other", "obs_meta", "obs_trim", "control"]
 
 
 def compose(run: Path, tok: Tokenizer) -> dict[str, Any]:
@@ -39,7 +40,7 @@ def compose(run: Path, tok: Tokenizer) -> dict[str, Any]:
     for prof, counts in per_profile.items():
         total = sum(counts.values())
         private = total - counts["shared_prefix"]
-        obs = counts["obs_sf"] + counts["obs_other"] + counts["obs_meta"]
+        obs = counts["obs_sf"] + counts["obs_other"] + counts["obs_meta"] + counts["obs_trim"]
         out[prof] = {
             "tasks": n_tasks[prof],
             "mean_tokens": round(total / n_tasks[prof]),

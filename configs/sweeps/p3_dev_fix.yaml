@@ -1,0 +1,20 @@
+# Phase 3, post-hoc fix (2026-11-19, after seeing p3_dev): the first ours+TRIM runs were slower than
+# untrimmed ours (16k x4 -4%/-9%, 8k x1 -13%/-19%) because an eager compaction request queued at the
+# gate like any request, and while it waited its own slot was taken as a victim (~94% of the
+# evictions outside tool waits; offloads of those slots then hit the restore-bound guard), so a
+# context that was about to shrink was thrown away and re-prefilled. Fix (KVConfig.shrink_fast,
+# default on): a request that only shrinks its own resident slot is dispatched at once under the
+# full gate (it cannot raise U) and is never a victim while it waits. No effect without TRIM
+# (append-only requests always have f > s) and none on B1 (observe has no gate). Same knobs and
+# priors as p3_dev.yaml; reported next to the first runs, labelled as a post-hoc fix.
+name: p3_dev
+defaults: {workload: workloads/dev_long_200.json, parallel: 64, reps: 3, policy: ours, trim_eager: true}
+points:
+  - {name: c16k_d4_ours_oracle_sf, ctx: 16384, delay_scale: 4.0, k: 16, trim: oracle,
+     kvm: {omega: 1.0, priors: configs/kv_priors_trim_oracle.json, shrink_fast: true}}
+  - {name: c16k_d4_ours_rel2_sf, ctx: 16384, delay_scale: 4.0, k: 16, trim: "relevance:2",
+     kvm: {omega: 1.0, priors: configs/kv_priors_trim_relevance2.json, shrink_fast: true}}
+  - {name: c8k_d1_ours_oracle_sf, ctx: 8192, delay_scale: 1.0, k: 8, trim: oracle,
+     kvm: {omega: 1.0, priors: configs/kv_priors_trim_oracle.json, shrink_fast: true}}
+  - {name: c8k_d1_ours_rel2_sf, ctx: 8192, delay_scale: 1.0, k: 8, trim: "relevance:2",
+     kvm: {omega: 1.0, priors: configs/kv_priors_trim_relevance2.json, shrink_fast: true}}

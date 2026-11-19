@@ -1,0 +1,15 @@
+# Phase 3 step 1 (docs/phase3_spec.md §4): selector choice on perf at ample memory (64k x1, no KV
+# pressure), B1 fixed K = 8 in observe mode, 2 reps, every TRIM run eager. The runs also give
+# the trimmed peak priors (scripts/fit_kvm_priors.py) for the KV-admission runs in step 2.
+# Rule (fixed before any run): among referenced, relevance:2 and relevance:3, the smallest
+# mean peak context whose mean F1 is within 0.03 of none's; else the highest F1, reported as such.
+name: p3_select
+defaults: {workload: workloads/p1_long_200.json, parallel: 64, reps: 2, ctx: 65536, delay_scale: 1.0, k: 8,
+           policy: observe}
+points:
+  - {name: c64k_d1_none}
+  - {name: c64k_d1_oracle, trim: oracle, trim_eager: true}
+  - {name: c64k_d1_referenced, trim: referenced, trim_eager: true}
+  - {name: c64k_d1_relevance2, trim: "relevance:2", trim_eager: true}
+  - {name: c64k_d1_relevance3, trim: "relevance:3", trim_eager: true}
+  - {name: c64k_d1_drop, trim: drop, trim_eager: true}

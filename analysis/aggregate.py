@@ -20,6 +20,17 @@ Phase 2 columns (empty for Phase 1 runs):
   recompute_tokens  re-prefilled tokens from the traces, one estimator for every run
   gave_up_offloaded / _dropped / _erased  victims by action, from the per-task manager counters
 
+Phase 3 (TRIM) columns. Requests of kind 'trim' (eager TRIM's prefill-only requests) are server
+work, so prefill_per_task and work_tok_per_s include them, but they are not agent steps:
+decode, TTFT and the per-request hit rate leave them out. A request whose prompt was compacted
+(trace step `trimmed_obs`, the eager trim request or the lazy next step) loses the cached
+tail on purpose, so recompute_tokens skips it and trim_lost_tokens counts it instead:
+  trim_requests_per_task, trim_prefill_per_task   the eager requests and their prefill
+  trim_lost_tokens   cells dropped or re-prefilled at a compaction (removed + recomputed); in
+               lazy mode a manager eviction in the same idle period lands here too
+  context_mean, context_peak_mean   prompt tokens per agent request, and the per-task peak of
+               the slot's cells (Q1: how much KV a task needs), for every run
+
     uv run python -m analysis.aggregate [results]
 """
 from __future__ import annotations
@@ -91,33 +102,55 @@ def server_log_row(run: Path, summary: dict[str, Any], gate: str | None) -> dict
     return flatten(sl, "slog_")
 
 
+def is_trim(step: dict[str, Any]) -> bool:
+    """Eager TRIM's prefill-only request: server work, not an agent step."""
+    return step.get("kind") == "trim"
+
+
+def _tok(llm: dict[str, Any], *keys: str) -> int:
+    return sum(int(llm.get(k) or 0) for k in keys)
+
+
 def work_row(tasks: list[dict[str, Any]], makespan: float | None) -> dict[str, Any]:
-    """Work-normalized throughput: tokens the server computed per second, and per task."""
-    steps = [s["llm"] for t in tasks for s in t["trace"]["steps"]]
-    pre = sum(int(s.get("prompt_n") or 0) for s in steps)
-    dec = sum(int(s.get("predicted_n") or 0) for s in steps)
-    hits = [int(s.get("cache_n") or 0) / (int(s.get("prompt_n") or 0) + int(s.get("cache_n") or 0))
-            for s in steps if s.get("ok") and int(s.get("prompt_n") or 0) + int(s.get("cache_n") or 0) > 0]
-    final = [int(st[-1]["llm"].get("prompt_n") or 0) + int(st[-1]["llm"].get("cache_n") or 0)
-             + int(st[-1]["llm"].get("predicted_n") or 0)
-             for t in tasks if (st := t["trace"]["steps"]) and st[-1]["llm"].get("ok")]
+    """Work-normalized throughput: tokens the server computed per second, and per task.
+    Prefill counts every request (TRIM's included); decode, the hit rate and the context
+    sizes count the agent's own steps."""
+    all_steps = [s for t in tasks for s in t["trace"]["steps"]]
+    agent = [s["llm"] for s in all_steps if not is_trim(s)]
+    trim = [s["llm"] for s in all_steps if is_trim(s)]
+    pre = sum(_tok(s, "prompt_n") for s in agent + trim)
+    dec = sum(_tok(s, "predicted_n") for s in agent)
+    hits = [_tok(s, "cache_n") / _tok(s, "prompt_n", "cache_n")
+            for s in agent if s.get("ok") and _tok(s, "prompt_n", "cache_n") > 0]
+    final, peaks = [], []
+    for t in tasks:
+        own = [s["llm"] for s in t["trace"]["steps"] if not is_trim(s)]
+        if own and own[-1].get("ok"):
+            final.append(_tok(own[-1], "prompt_n", "cache_n", "predicted_n"))
+        cells = [_tok(s["llm"], "prompt_n", "cache_n", "predicted_n") - 1
+                 for s in t["trace"]["steps"] if s["llm"].get("ok")]
+        if cells:
+            peaks.append(max(cells))
+    ctx = [_tok(s, "prompt_n", "cache_n") for s in agent if s.get("ok")]
     n = len(tasks) or 1
     return {"work_tok_per_s": round((pre + dec) / makespan, 1) if makespan else None,
             "prefill_tok_per_s": round(pre / makespan, 1) if makespan else None,
             "decode_tok_per_s": round(dec / makespan, 1) if makespan else None,
             "prefill_per_task": round(pre / n, 1), "decode_per_task": round(dec / n, 1),
             "final_context_mean": round(statistics.mean(final), 1) if final else None,
-            "req_hit_rate_mean": round(statistics.mean(hits), 4) if hits else None}
+            "req_hit_rate_mean": round(statistics.mean(hits), 4) if hits else None,
+            "context_mean": round(statistics.mean(ctx), 1) if ctx else None,
+            "context_peak_mean": round(statistics.mean(peaks), 1) if peaks else None,
+            "trim_requests_per_task": round(len(trim) / n, 3),
+            "trim_prefill_per_task": round(sum(_tok(s, "prompt_n") for s in trim) / n, 1)}
 
 
-def recompute_tokens(tasks: list[dict[str, Any]]) -> int | None:
-    """Prompt tokens re-prefilled because cached KV was lost, from the traces alone: for each
-    pair of consecutive ok requests of a task, the cells the slot held after the first
-    (prompt + output - 1) minus what the next one found cached. It is the manager's own count
-    (kvm.on_req_end; equal on every managed run) but needs no manager, so B1, B2 and ours share
-    one estimator. kv_timeline's kv_evicted_tokens is not used here: it skips requests that moved
-    slot (most of unpinned B2's losses) and losses under 5% of the prompt."""
-    lost, seen = 0, False
+def recompute_split(tasks: list[dict[str, Any]]) -> tuple[int | None, int | None]:
+    """(recompute, trim_lost) from the traces: for each pair of consecutive ok requests of a
+    task, the cells the slot held after the first (prompt + output - 1) minus what the next one
+    found cached. Pairs whose second request carries a compacted prompt (step `trimmed_obs`)
+    lost that tail by design and go to trim_lost; None when the runs have no such pair."""
+    lost, trim_lost, seen, seen_trim = 0, 0, False, False
     for t in tasks:
         prev = None
         for s in (t.get("trace") or {}).get("steps") or []:
@@ -126,9 +159,24 @@ def recompute_tokens(tasks: list[dict[str, Any]]) -> int | None:
                 continue
             seen = True
             if prev is not None:
-                lost += max(0, prev - int(llm.get("cache_n") or 0))
+                d = max(0, prev - int(llm.get("cache_n") or 0))
+                if s.get("trimmed_obs") is not None:
+                    trim_lost, seen_trim = trim_lost + d, True
+                else:
+                    lost += d
             prev = int(llm.get("prompt_n") or 0) + int(llm.get("cache_n") or 0) + int(llm.get("predicted_n") or 0) - 1
-    return lost if seen else None
+    return (lost if seen else None), (trim_lost if seen_trim else None)
+
+
+def recompute_tokens(tasks: list[dict[str, Any]]) -> int | None:
+    """Prompt tokens re-prefilled because cached KV was lost, from the traces alone: for each
+    pair of consecutive ok requests of a task, the cells the slot held after the first
+    (prompt + output - 1) minus what the next one found cached. It is the manager's own count
+    (kvm.on_req_end; equal on every managed run without TRIM, whose compactions the manager also
+    counts) but needs no manager, so B1, B2 and ours share one estimator. kv_timeline's
+    kv_evicted_tokens is not used here: it skips requests that moved slot (most of unpinned B2's
+    losses) and losses under 5% of the prompt. TRIM compactions are excluded (recompute_split)."""
+    return recompute_split(tasks)[0]
 
 
 def give_up_row(tasks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -163,7 +211,8 @@ def run_row(run: Path) -> dict[str, Any]:
     row.update({f"status_{s}": n for s, n in sorted(statuses.items())})
     with open(run / "tasks.jsonl", encoding="utf-8") as f:
         tasks = [json.loads(line) for line in f]
-    ttft = sorted(s["llm"]["ttft_s"] for t in tasks for s in t["trace"]["steps"] if s["llm"].get("ttft_s") is not None)
+    ttft = sorted(s["llm"]["ttft_s"] for t in tasks for s in t["trace"]["steps"]
+                  if s["llm"].get("ttft_s") is not None and not is_trim(s))
     # Service time (admit -> done): in closed-loop runs every task arrives at t=0, so latency is
     # mostly queueing; service time is what one agent experiences once it runs.
     service = sorted(t["service_s"] for t in tasks)
@@ -180,7 +229,11 @@ def run_row(run: Path) -> dict[str, Any]:
                       or [t["task_id"] for t in tasks if (t.get("kv") or {}).get("exceeded")])
         row.update({"kv_exceeded": len(over), "kv_exceeded_ids": ";".join(over)})
     row.update(work_row(tasks, summary.get("makespan_s")))
-    row["recompute_tokens"] = recompute_tokens(tasks)
+    row["recompute_tokens"], trim_lost = recompute_split(tasks)
+    if trim_lost is not None or meta.get("trim", "none") != "none":
+        tr = summary.get("trim") or {}
+        row.update({"trim": meta.get("trim"), "trim_eager": meta.get("trim_eager"), "trim_lost_tokens": trim_lost,
+                    "trim_kept_char_share": tr.get("kept_char_share"), "trim_sf_kept_share": tr.get("sf_kept_share")})
     row.update(give_up_row(tasks))
     row.update({f"kv_{m}": kv.get(m) for m in KV})
     row["kv_mode"] = kv.get("mode", "reconstructed")

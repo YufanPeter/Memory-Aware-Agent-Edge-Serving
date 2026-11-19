@@ -108,6 +108,11 @@ class KVConfig:
     op_timeout_s: float = 5.0
     prior_delay_scale: float | None = None   # oracle_prior only (None: the run's delay scale)
     priors: str = "configs/kv_priors.json"
+    # Phase 3: a request that only shrinks its own resident slot (an eager TRIM compaction) is
+    # dispatched at once, outside the queue order, and its slot is never taken as a victim while
+    # it waits. False reproduces the first Phase 3 runs (p3_dev 2026-11-19), where such requests
+    # queued like any other and their slots were evicted just before they would have shrunk.
+    shrink_fast: bool = True
     # Set by the runner from its own arguments, not by presets.
     pinned: bool = True           # False: the server picks slots (B2 observe)
     cache_ram_mib: float = 0.0    # the server's --cache-ram (B2 HOST_CACHED sub-mode when unpinned)
@@ -357,6 +362,7 @@ class KVManager:
         self.op_reasons: Counter[str] = Counter()
         self.evictions: Counter[str] = Counter()
         self.give_ups = self.wasted_saves = self.restores = self.restore_failed = self.resolved = 0
+        self.shrink_fast = 0
         self.overflows = self.purges_seen = self.truncated = self.tokenize_fallbacks = self.expiries = 0
         self.recompute_tokens = self.admitted = self.max_agents = self.max_U = self.recon_errors = 0
         self.infeasible: list[str] = []
@@ -726,8 +732,28 @@ class KVManager:
         self._epoch += 1
         self._kick()
 
+    def _shrinks(self, w: _Waiter) -> bool:
+        """Does w only shrink its own resident slot (f <= s: an eager TRIM compaction rewrites the
+        slot's tail shorter)? Under the full gate its charge is max(s, f) = s, what the slot already
+        holds, so dispatching it never raises U and needs no victim; after the response U drops.
+        Append-only requests always have f > s (the prompt extends the slot, plus n_predict >= 1),
+        so Phase 2 behaviour is unchanged."""
+        sk = self.slots[w.slot]
+        return (self.cfg.shrink_fast and self.cfg.gate == "full" and w.prio == 0 and not w.dispatched
+                and sk.owner == w.agent.task_id and sk.state in (IDLE, READY) and not sk.busy
+                and not sk.req_out and w.agent.img_path is None and 0 < w.f <= sk.s)
+
     async def _gate(self, w: _Waiter) -> None:
         loop = asyncio.get_running_loop()
+        if self._shrinks(w):   # outside the queue order: it cannot delay anyone (see _shrinks)
+            async with self._lock:
+                if self._shrinks(w):
+                    D = self._deficit(w)
+                    if D <= 0:
+                        w.deficit0 = D
+                        self.shrink_fast += 1
+                        self._dispatch(w)
+                        return
         while True:
             if self._head() is w:
                 async with self._lock:
@@ -829,7 +855,7 @@ class KVManager:
         """E(h) from the current ledger (spec §4.2), never precomputed: ops take 100-300 ms."""
         out: list[Victim] = []
         a_h = w.agent
-        behind = {x.agent.task_id for x in self._waiters if x is not w}
+        behind = {x.agent.task_id for x in self._waiters if x is not w and not self._shrinks(x)}
         now = time.monotonic()
         for sk in self.slots.values():
             if (sk.busy or sk.s <= 0 or sk.state in SERVER_BUSY or sk.state in (SAVING, HOST_CACHED)
@@ -1625,6 +1651,7 @@ class KVManager:
             "kv_exceeded": list(self.exceeded), "kv_would_truncate": self.would_truncate,
             "admitted": self.admitted, "max_agents": self.max_agents,
             "give_ups": self.give_ups, "evictions": dict(self.evictions), "wasted_saves": self.wasted_saves,
+            "shrink_fast": self.shrink_fast,
             "restores": self.restores, "restore_failed": self.restore_failed, "unknown_resolved": self.resolved,
             "ops": self.op_stats, "op_reasons": dict(self.op_reasons),
             "op_server_s": round(self.op_server_s, 3), "op_wall_s": round(self.op_wall_s, 3),
