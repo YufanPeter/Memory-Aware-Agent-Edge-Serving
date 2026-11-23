@@ -1,0 +1,8 @@
+# Check of the evictable golden slots (2026-11-23): the 8k + default mix points of p3_probe again.
+# Before, 11 oneshot_long tasks were refused because three golden slots pinned 3,114 of 7,946 tokens.
+name: p3_golden_check
+defaults: {parallel: 64, delay_scale: 1.0, k: 8, llama_server: ~/llama.cpp/build/bin/llama-server,
+           sel_scorer: bm25, sel_keep: 0.3, sel_keep_last: 0}
+points:
+  - {name: c8k_mixed_base, ctx: 8192, workload: workloads/p3_mixed_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c8k_mixed_kv, ctx: 8192, workload: workloads/p3_mixed_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}

@@ -58,9 +58,13 @@ recomputed tokens and prefix-cache hits explain the results.
   at 8k it is memory-bound and selective KV adds +18% goodput (long mix) / +15% (default mix) at equal F1.
   Fixed a gate deadlock (requests that can never fit next to the golden slots are now refused:
   `KVBudgetExceeded`).
-- **Next**: make golden slots evictable caches (at 8k they hold 39% of the pool and block
-  `oneshot_long`), then tune rho / fixed K on 8k + long mix (main) and 8k + default mix, then the
-  bursty final runs.
+- **Golden slots are evictable caches** (2026-11-23): 0 overflows at 8k; a fork/evict race and golden
+  ping-pong were fixed. At 8k + default mix the selective-KV gain vanishes once the 5k-token
+  `oneshot_long` tasks actually run (nothing to trim): it helps only when memory is the bottleneck
+  AND enough KV is trimmable.
+- **Next** (`docs/phase2_ideas.md` §4.4): (1) regime map: pool {8k, 12k, 16k} x react_long share
+  {30, 70, 100%}, base vs base + kv; (2) main experiment on 8k + long mix: tune fixed K and rho on
+  dev, then bursty test runs (5 configs x 3 loads x 2).
 - Development is on the AWS instance (see AWS below); the Mac is for MockLLM work.
 
 ## Phase 1 findings (A10G, 7B, 5,890 tasks)
