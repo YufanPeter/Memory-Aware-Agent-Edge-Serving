@@ -59,6 +59,12 @@ RESIDENT = ("ready", "active", "idle", "waiting", "stale", "golden")
 N_GOLDEN = 3   # one golden slot per system prompt: react, react_explain, oneshot
 
 
+class KVBudgetExceeded(RuntimeError):
+    """A request needs more KV than the pool can ever give it: its own tokens plus the golden slots
+    (never evicted) exceed the pool. Waiting cannot help, so the request is refused instead of
+    blocking the gate for every agent queued behind it."""
+
+
 def family_of(profile: str) -> str:
     """Which system prompt (shared prefix) a profile's prompts start with."""
     if profile.startswith("oneshot") or profile == "closedbook":
@@ -100,6 +106,7 @@ class KVStats:
     forks: int = 0
     fork_failures: int = 0
     forked_tokens: int = 0
+    refused: int = 0             # requests refused: they could never fit (KVBudgetExceeded)
 
 
 class KVManager:
@@ -148,6 +155,13 @@ class KVManager:
         tasks = sum(max(r.peak, r.tokens, r.ctx_tokens) - self.credit(r.family)
                     for r in self.recs.values() if r.task_id)
         return tasks + sum(r.tokens for r in self.recs.values() if r.state == "golden")
+
+    def golden_tokens(self) -> int:
+        """Tokens of the golden slots: the part of the pool the gate can never free."""
+        return sum(r.tokens for r in self.recs.values() if r.state == "golden")
+
+    def _never_fits(self, rec: SlotRec, need: int, limit: float) -> bool:
+        return self.own(rec, need) + self.golden_tokens() > limit
 
     def under_pressure(self) -> bool:
         return bool(self.admit_q or self.waiters) or self.resident() >= self.policy.pressure * self.pool
@@ -331,8 +345,10 @@ class KVManager:
 
     async def _make_room(self, rec: SlotRec, need: int) -> None:
         limit = (1 - self.policy.margin) * self.pool
-        if need > limit:
-            raise RuntimeError(f"slot {rec.slot} needs {need} tokens, more than the whole pool ({self.pool})")
+        if self._never_fits(rec, need, limit):
+            self.stats.refused += 1
+            raise KVBudgetExceeded(f"slot {rec.slot} needs {need} tokens; the pool holds {int(limit)} "
+                                   f"with {self.golden_tokens()} in golden slots")
         if self.resident() - self.own(rec, rec.tokens) + self.own(rec, need) <= limit and not self.waiters:
             return
         t0 = time.monotonic()
@@ -341,6 +357,11 @@ class KVManager:
         self._set(rec, "waiting")
         try:
             while True:
+                if self._never_fits(rec, need, limit):   # a golden slot appeared while we waited
+                    self._set(rec, "ready" if prev != "offloaded" or rec.tokens else prev)
+                    self.stats.refused += 1
+                    raise KVBudgetExceeded(f"slot {rec.slot} needs {need} tokens; the pool holds {int(limit)} "
+                                           f"with {self.golden_tokens()} in golden slots")
                 head = self.waiters[0] == rec.slot
                 if head and self.resident() - self.own(rec, rec.tokens) + self.own(rec, need) <= limit:
                     break
@@ -353,6 +374,7 @@ class KVManager:
         finally:
             if rec.slot in self.waiters:
                 self.waiters.remove(rec.slot)
+                self.cond.notify_all()       # the next waiter may now be at the head
         if rec.state == "waiting":
             self._set(rec, "ready" if prev != "offloaded" or rec.tokens else prev)
         wait = time.monotonic() - t0
@@ -509,6 +531,6 @@ class KVManager:
                 "admit_wait_s": round(s.admit_wait_s, 3), "slot_ops": s.slot_ops,
                 "slot_op_failures": s.slot_op_failures, "slot_op_ms": round(s.slot_op_ms, 1),
                 "restores_prefetched": s.restores_prefetched, "peak_resident_tokens": s.peak_resident,
-                "forks": s.forks, "fork_failures": s.fork_failures, "forked_tokens": s.forked_tokens,
+                "forks": s.forks, "fork_failures": s.fork_failures, "forked_tokens": s.forked_tokens, "refused": s.refused,
                 "golden_slots": {k: v[0] for k, v in self.golden.items()},
                 "pool_tokens": self.pool, "policy": self.policy.__dict__}

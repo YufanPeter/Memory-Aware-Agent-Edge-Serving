@@ -22,6 +22,7 @@ Phase 2 keys (passed to the runner; see edgeserve/policies.py):
     sel_scorer: oracle     # oracle | bm25 | entity | recency
     sel_keep: 0.3
     sel_keep_last: 1
+    sel_trigger: always    # always | pressure (trim only under memory pressure; managed policies)
     llama_server: <path>  # e.g. the patched build for the fork policy (default: $LLAMA_SERVER)
 The runner gets --pool-tokens = ctx for every managed policy.
 Results: results/<name>/<point>/rep<i>/ (runner outputs + server_cmd.txt + server.log).
@@ -45,7 +46,7 @@ DEFAULTS: dict[str, Any] = {"ctx": 65536, "parallel": 64, "cache_ram": 0, "extra
                             "pin": True, "cache": True, "reps": 1, "task_timeout": 900, "seed": 0, "port": 8080,
                             "policy": "fixed_k"}
 RUNNER_OPTS = ("overcommit", "pressure", "slots",
-               "selective", "sel_scorer", "sel_keep", "sel_keep_last")
+               "selective", "sel_scorer", "sel_keep", "sel_keep_last", "sel_trigger")
 
 
 def wait_healthy(url: str, proc: subprocess.Popen, timeout_s: float = 300.0) -> bool:

@@ -168,3 +168,53 @@ async def test_fork_keeps_a_tight_pool_safe(corpus, item):
     traces = await asyncio.gather(*(one(f"t{k}") for k in range(6)))
     assert llm.overflows == 0 and not llm.purges
     assert all(t.status == "ok" for t in traces)
+
+
+async def test_a_request_that_can_never_fit_is_refused_without_blocking_others(corpus, item):
+    """An agent whose context outgrows the pool fails alone (ctx_overflow); it must not sit at the
+    head of the gate queue and block the agent behind it (the base_r1.0 timeout of 2026-11-23)."""
+    peak = await footprint(corpus, item)
+    pool = int(peak * 0.9)                         # the agent's last request cannot fit at all
+    llm = MockLLM(two_searches, decode_s_per_token=2e-4, pool_tokens=pool)
+    events = EventLog()
+    kvm = KVManager(llm, events, get_policy("ttl_fixed_k"), pool, 2)
+    agent = Agent(llm, corpus, events, kvm=kvm)
+    profile = Profile(name="react_short", few_shot=2, delay=DELAY)
+
+    async def one(k: int):
+        await kvm.admit(f"t{k}", profile.name, k)
+        try:
+            return await asyncio.wait_for(agent.run(f"t{k}", item, profile, slot=k), timeout=10)
+        finally:
+            await kvm.release(k)
+
+    traces = await asyncio.gather(*(one(k) for k in range(2)))
+    assert all(t.status == "ctx_overflow" for t in traces)     # each fails on its own, nothing hangs
+    assert kvm.stats.refused == 2 and not kvm.waiters
+    assert llm.overflows == 0                                    # the server never saw an oversize request
+
+
+async def test_golden_slots_count_as_unfreeable_room(corpus, item):
+    """The 2026-11-23 deadlock: the request fits the pool on its own, but not next to the golden
+    slots (never evicted). It used to wait at the head of the gate forever."""
+    from edgeserve.prompt import CHATML, react_system
+    peak = await footprint(corpus, item)                        # react agent alone, no fork
+    explain_prefix = CHATML["system"].format(content=react_system(2, True)) + CHATML["user_open"]
+    p_explain = MockLLM.tokens(explain_prefix)
+    pool = int((peak + p_explain // 2) / 0.97)                  # fits alone; not with the explain golden too
+    llm = MockLLM(two_searches, decode_s_per_token=2e-4, pool_tokens=pool)
+    events = EventLog()
+    kvm = KVManager(llm, events, get_policy("base_fork", overcommit=100.0), pool, 8)
+    agent = Agent(llm, corpus, events, kvm=kvm)
+
+    async def one(task: str, profile: Profile):
+        s = await kvm.admit(task, profile.name)
+        try:
+            return await asyncio.wait_for(agent.run(task, item, profile, slot=s), timeout=10)
+        finally:
+            await kvm.release(s)
+
+    explain = await one("e", Profile(name="react_explain", few_shot=2, explain_tokens=4, delay=DELAY))
+    assert explain.status == "ok" and len(kvm.golden) == 1      # its golden slot stays
+    react = await one("r", Profile(name="react_short", few_shot=2, delay=DELAY))
+    assert react.status == "ctx_overflow" and kvm.stats.refused >= 1 and not kvm.waiters

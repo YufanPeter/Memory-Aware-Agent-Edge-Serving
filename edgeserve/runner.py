@@ -47,16 +47,18 @@ from edgeserve.workload import load_workload
 
 
 def mock_script(prompt: str) -> str:
-    """Searches the question's first capitalized phrase once, then finishes with it."""
+    """Searches the question's first two capitalized phrases, then finishes with the first.
+    Two searches, so selective KV has an observation to trim at the second tool call."""
     if prompt.endswith("finish["):
         return "unknown]"
     task_part = prompt.rsplit("Question: ", 1)[-1]   # skip the few-shot examples
     n_obs = task_part.count("\nObservation ")
     question = task_part.split("<|im_end|>")[0]
-    entity = (re.findall(r"[A-Z][\w'-]+(?: [A-Z][\w'-]+)*", question) or ["Wikipedia"])[0]
-    if "Context:\n" in prompt or n_obs >= 1:
-        return f" I have enough information.\nAction {n_obs + 1}: finish[{entity}]"
-    return f" I need to search {entity}.\nAction 1: search[{entity}]\nObservation"
+    entities = re.findall(r"[A-Z][\w'-]+(?: [A-Z][\w'-]+)*", question) or ["Wikipedia"]
+    if "Context:\n" in prompt or n_obs >= 2:
+        return f" I have enough information.\nAction {n_obs + 1}: finish[{entities[0]}]"
+    entity = entities[min(n_obs, len(entities) - 1)]
+    return f" I need to search {entity}.\nAction {n_obs + 1}: search[{entity}]\nObservation"
 
 
 def _git_rev() -> str:
@@ -117,9 +119,10 @@ def _req_sum(row: dict[str, Any], key: str) -> int:
 def _trim_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Selective KV totals (absent when no step trimmed anything)."""
     trims = [s["trim"] for r in rows for s in r["trace"]["steps"] if s.get("trim")]
+    deferred = sum(bool(s.get("trim_deferred")) for r in rows for s in r["trace"]["steps"])
     if not trims:
-        return {}
-    return {"trims": len(trims), "trim_failures": sum(not t["ok"] for t in trims),
+        return {"trim_deferred": deferred} if deferred else {}
+    return {"trims": len(trims), "trim_deferred": deferred, "trim_failures": sum(not t["ok"] for t in trims),
             "trim_tokens_total": sum(t["tokens"] for t in trims), "trim_chars_total": sum(t["chars"] for t in trims),
             "trim_sentences": sum(t["sentences"] for t in trims),
             "trim_sf_sentences": sum(t["sf_sentences"] for t in trims),
@@ -220,7 +223,10 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         kvm = KVManager(llm, events, policy, args.pool_tokens, n_slots if policy.admission else n_workers)
     selective = None
     if args.selective != "none":
-        selective = SelectiveKV(llm, args.selective, args.sel_scorer, args.sel_keep, args.sel_keep_last)
+        if args.sel_trigger == "pressure" and kvm is None:
+            raise SystemExit("--sel-trigger pressure needs a managed policy (the KV manager reports pressure)")
+        selective = SelectiveKV(llm, args.selective, args.sel_scorer, args.sel_keep, args.sel_keep_last,
+                                args.sel_trigger)
     agent = Agent(llm, corpus, events, seed=args.seed, delay_scale=args.delay_scale, kvm=kvm,
                   selective=selective)
     queue: asyncio.Queue = asyncio.Queue()
@@ -289,7 +295,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         "workload_meta": wl["meta"], "k": args.k, "workers": n_workers, "pin_slots": pin,
         "cache_prompt": not args.no_cache, "policy": policy.__dict__, "pool_tokens": args.pool_tokens,
         "selective": None if selective is None else {"mechanism": args.selective, "scorer": args.sel_scorer,
-                                                     "keep": args.sel_keep, "keep_last": args.sel_keep_last},
+                                                     "keep": args.sel_keep, "keep_last": args.sel_keep_last,
+                                                     "trigger": args.sel_trigger},
         "delay_scale": args.delay_scale, "seed": args.seed, "mock": args.mock,
         "profiles": {n: p.__dict__ for n, p in profiles.items()},
         "server_props": {k: props.get(k) for k in ("build_info", "model_path", "total_slots",
@@ -335,6 +342,8 @@ def main() -> None:
     ap.add_argument("--sel-scorer", choices=["oracle", "bm25", "entity", "recency"], default="oracle")
     ap.add_argument("--sel-keep", type=float, default=0.3, help="share of sentences (recency: observations) kept")
     ap.add_argument("--sel-keep-last", type=int, default=1, help="newest observations left untouched")
+    ap.add_argument("--sel-trigger", choices=["always", "pressure"], default="always",
+                    help="trim at every tool call, or only while the KV manager reports memory pressure")
     ap.add_argument("--mock-tax", type=float, help="MockLLM only: extra decode seconds per generated token for "
                     "every resident KV token (models the unified-pool attention span measured in X1)")
     args = ap.parse_args()

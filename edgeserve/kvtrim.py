@@ -267,13 +267,21 @@ class SelectiveKV:
     mechanism "text": only remove the text; the next request re-prefills from the first change
                       (the usual "trim old tool outputs" approach, the baseline).
     Sentences are chosen by edgeserve.selection.select_drop (scorer, keep share, keep_last newest
-    observations untouched); each observation is processed once."""
+    observations untouched); each observation is processed once.
+
+    trigger "always":   trim at every tool call;
+    trigger "pressure": trim only while the KV manager reports memory pressure (tasks waiting for
+                        admission or room, or the pool above its pressure share). Observations left
+                        alone stay unprocessed and are trimmed at a later tool call under pressure."""
 
     def __init__(self, llm: Any, mechanism: str = "kv", scorer: str = "oracle", keep: float = 0.3,
-                 keep_last: int = 1) -> None:
+                 keep_last: int = 1, trigger: str = "always") -> None:
         if mechanism not in ("kv", "text"):
             raise ValueError(f"unknown mechanism {mechanism!r}")
+        if trigger not in ("always", "pressure"):
+            raise ValueError(f"unknown trigger {trigger!r}")
         self.llm, self.mechanism, self.scorer, self.keep, self.keep_last = llm, mechanism, scorer, keep, keep_last
+        self.trigger = trigger
 
     async def trim(self, slot: int, p: Any) -> TrimResult | None:
         from edgeserve.selection import select_drop   # local import: selection imports prompt, not us

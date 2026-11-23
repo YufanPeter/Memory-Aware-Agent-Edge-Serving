@@ -2,8 +2,10 @@
 edgeserve/kvtrim.SelectiveKV against MockLLM."""
 from edgeserve.agent import Agent
 from edgeserve.events import EventLog
+from edgeserve.kvm import KVManager
 from edgeserve.kvtrim import TRIMMED, SelectiveKV
 from edgeserve.llm import MockLLM
+from edgeserve.policies import get_policy
 from edgeserve.profiles import Profile
 from edgeserve.prompt import Prompt
 from edgeserve.selection import select_drop
@@ -55,6 +57,35 @@ async def test_text_trim_forces_a_re_prefill(corpus, item):
     assert [s.trim["sentences"] for s in text.steps if s.trim] == [s.trim["sentences"] for s in kv.steps if s.trim]
     assert text.steps[3].llm["prompt_n"] > kv.steps[3].llm["prompt_n"]
     assert all(s.trim["tokens"] == 0 for s in text.steps if s.trim)
+
+
+async def run_with_trigger(corpus, item, pressure: float):
+    """One agent under a KV manager whose pressure threshold is `pressure` (0: always under pressure,
+    1 with a large pool: never), selective KV triggered by pressure, trimming right after use."""
+    llm = MockLLM(three_searches)
+    events = EventLog()
+    kvm = KVManager(llm, events, get_policy("ttl_fixed_k", pressure=pressure), 100_000, 1)
+    sel = SelectiveKV(llm, "kv", scorer="bm25", keep=0.3, keep_last=0, trigger="pressure")
+    agent = Agent(llm, corpus, events, kvm=kvm, selective=sel)
+    await kvm.admit("t0", "react_short", 0)
+    trace = await agent.run("t0", item, Profile(name="react_short", few_shot=2, delay=DELAY), slot=0)
+    await kvm.release(0)
+    return trace
+
+
+async def test_pressure_trigger_waits_while_memory_is_free(corpus, item):
+    trace = await run_with_trigger(corpus, item, pressure=1.0)
+    assert trace.status == "ok"
+    assert not any(s.trim for s in trace.steps)
+    assert sum(s.trim_deferred for s in trace.steps) == 3          # every tool call postponed trimming
+    assert not any(k == TRIMMED for k, _ in trace.segments)        # nothing marked: still eligible later
+
+
+async def test_pressure_trigger_trims_under_pressure(corpus, item):
+    trace = await run_with_trigger(corpus, item, pressure=0.0)
+    trims = [s.trim for s in trace.steps if s.trim]
+    assert trace.status == "ok" and trims and all(t["ok"] for t in trims)
+    assert sum(t["tokens"] for t in trims) > 0 and not any(s.trim_deferred for s in trace.steps)
 
 
 # --- sentence selection ----------------------------------------------------------------------

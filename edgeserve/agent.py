@@ -16,6 +16,7 @@ from edgeserve.corpus import Corpus
 from edgeserve.data import HotpotItem
 from edgeserve.delays import DelaySampler
 from edgeserve.events import EventLog
+from edgeserve.kvm import KVBudgetExceeded
 from edgeserve.llm import LLMResult
 from edgeserve.profiles import Profile
 from edgeserve.prompt import CHATML, CLOSEDBOOK_RULES, ONESHOT_RULES, Prompt, react_system
@@ -49,6 +50,7 @@ class StepRecord:
     tool_delay_s: float = 0.0
     obs_chars: int = 0
     trim: dict[str, Any] | None = None   # selective KV applied during this step's tool call
+    trim_deferred: bool = False          # trigger "pressure": no memory pressure, trimming postponed
 
 
 @dataclass
@@ -85,10 +87,19 @@ class Agent:
                          prompt_chars=len(prompt.text))
         if self.kvm is not None:   # may wait for room in the KV pool, restore offloaded KV, or fork the prefix
             prefix = prompt.segments[0][1] if prompt.segments and prompt.segments[0][0] == "shared_prefix" else None
-            await self.kvm.before_generate(trace.slot, len(prompt.text), n_predict, prefix)
+            try:
+                await self.kvm.before_generate(trace.slot, len(prompt.text), n_predict, prefix)
+            except KVBudgetExceeded as e:
+                # This request can never fit next to the golden slots: fail this task only (as a
+                # context overflow) instead of blocking the agents queued behind it.
+                res = LLMResult(ok=False, error=f"context exceeds the KV budget: {e}", slot=trace.slot)
+                return self._record(trace, step, kind, res)
         res = await self.llm.generate(prompt.text, n_predict, stop, trace.slot, ignore_eos)
         if self.kvm is not None:
             await self.kvm.after_generate(trace.slot, len(prompt.text), res)
+        return self._record(trace, step, kind, res)
+
+    def _record(self, trace: TaskTrace, step: int, kind: str, res: LLMResult) -> tuple[LLMResult, StepRecord]:
         info = res.to_dict()
         for k in ("t_start", "t_first_token", "t_end"):
             info[k] = self.events.rel(info[k]) if info[k] else None
@@ -102,6 +113,9 @@ class Agent:
         return res, rec
 
     async def _trim(self, trace: TaskTrace, p: Prompt, rec: StepRecord) -> None:
+        if self.selective.trigger == "pressure" and self.kvm is not None and not self.kvm.under_pressure():
+            rec.trim_deferred = True   # memory is not short: leave the observations for a later tool call
+            return
         r = await self.selective.trim(trace.slot, p)
         if r is None:
             return
