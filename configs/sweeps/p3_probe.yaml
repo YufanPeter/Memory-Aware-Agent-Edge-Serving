@@ -1,0 +1,17 @@
+# Selective KV step 3, headroom probe: is memory still the bottleneck once the base is in place?
+# For each scenario, the base and base + selective KV (kv, BM25 keep 30%, trim after use) at
+# rho 1.5, next to the compute ceiling of the same mix (131k pool, fixed K = 8, the Phase 1 best).
+# A scenario is memory-bound if the base stays well below the ceiling; selective KV can only win
+# there. 16k + default mix (compute-bound: base at ~93% of the ceiling) is in p3_tune_dev.
+name: p3_probe
+defaults: {parallel: 64, delay_scale: 1.0, k: 8, llama_server: ~/llama.cpp/build/bin/llama-server,
+           sel_scorer: bm25, sel_keep: 0.3, sel_keep_last: 0}
+points:
+  - {name: ceiling_mixed, ctx: 131072, workload: workloads/p3_mixed_dev200.json}
+  - {name: ceiling_long, ctx: 131072, workload: workloads/p3_long_dev200.json}
+  - {name: c8k_mixed_base, ctx: 8192, workload: workloads/p3_mixed_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c8k_mixed_kv, ctx: 8192, workload: workloads/p3_mixed_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: c16k_long_base, ctx: 16384, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c16k_long_kv, ctx: 16384, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: c8k_long_base, ctx: 8192, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c8k_long_kv, ctx: 8192, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}

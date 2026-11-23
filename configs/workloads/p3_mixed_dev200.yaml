@@ -1,0 +1,8 @@
+# Selective KV step 3, tuning: the Phase 1 default mix on all 200 dev questions, released at t=0
+# (closed loop), to measure each configuration's capacity on a 16k pool and pick fixed K* and rho*.
+name: p3_mixed_dev200
+split: dev
+n_tasks: 200
+seed: 0
+mix: {react_short: 0.4, react_long: 0.3, react_explain: 0.2, oneshot_long: 0.1}
+arrival: {type: batch}

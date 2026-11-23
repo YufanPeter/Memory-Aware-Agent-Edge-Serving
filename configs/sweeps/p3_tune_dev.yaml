@@ -1,0 +1,29 @@
+# Selective KV step 3, tuning on dev: each configuration's capacity on a 16k pool with the default
+# mix, all 200 dev tasks released at t=0 (closed loop), 1 repeat. Picks fixed K* and rho* per
+# configuration (highest goodput with no failed tasks); fixed K*'s throughput sets the arrival rates
+# of the test workloads (~50/80/110%). Selective KV: kv or text, BM25 keep 30%, trim after use.
+# Trimming shrinks each agent, so its best rho may be higher: kv_always also tries 3.0.
+name: p3_tune_dev
+defaults: {ctx: 16384, parallel: 64, workload: workloads/p3_mixed_dev200.json, delay_scale: 1.0,
+           llama_server: ~/llama.cpp/build/bin/llama-server, k: 4,
+           sel_scorer: bm25, sel_keep: 0.3, sel_keep_last: 0}
+points:
+  - {name: fixed_k2, k: 2}
+  - {name: fixed_k3, k: 3}
+  - {name: fixed_k4, k: 4}
+  - {name: fixed_k5, k: 5}
+  - {name: fixed_k6, k: 6}
+  - {name: base_r1.0, policy: base_fork, overcommit: 1.0}
+  - {name: base_r1.5, policy: base_fork, overcommit: 1.5}
+  - {name: base_r2.0, policy: base_fork, overcommit: 2.0}
+  - {name: base_r2.5, policy: base_fork, overcommit: 2.5}
+  - {name: text_r1.5, policy: base_fork, overcommit: 1.5, selective: text}
+  - {name: text_r2.0, policy: base_fork, overcommit: 2.0, selective: text}
+  - {name: text_r2.5, policy: base_fork, overcommit: 2.5, selective: text}
+  - {name: kv_r1.5, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: kv_r2.0, policy: base_fork, overcommit: 2.0, selective: kv}
+  - {name: kv_r2.5, policy: base_fork, overcommit: 2.5, selective: kv}
+  - {name: kv_r3.0, policy: base_fork, overcommit: 3.0, selective: kv}
+  - {name: kvp_r1.5, policy: base_fork, overcommit: 1.5, selective: kv, sel_trigger: pressure}
+  - {name: kvp_r2.0, policy: base_fork, overcommit: 2.0, selective: kv, sel_trigger: pressure}
+  - {name: kvp_r2.5, policy: base_fork, overcommit: 2.5, selective: kv, sel_trigger: pressure}

@@ -1,0 +1,13 @@
+# Selective KV step 3, pipeline check on the real server: the five configurations on 60 dev tasks of
+# the default mix with bursty arrivals (16k pool). Not a measurement: checks that every profile
+# completes, nothing overflows, trims happen, and the pressure trigger defers when memory is free.
+name: p3_smoke
+defaults: {ctx: 16384, parallel: 64, workload: workloads/p3_mixed_dev60_bursty.json, delay_scale: 1.0,
+           llama_server: ~/llama.cpp/build/bin/llama-server, k: 4,
+           sel_scorer: bm25, sel_keep: 0.3, sel_keep_last: 0}
+points:
+  - {name: fixed_k4}
+  - {name: base_fork, policy: base_fork}
+  - {name: text, policy: base_fork, selective: text}
+  - {name: kv_always, policy: base_fork, selective: kv}
+  - {name: kv_pressure, policy: base_fork, selective: kv, sel_trigger: pressure}

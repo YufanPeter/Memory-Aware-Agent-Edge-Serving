@@ -53,10 +53,14 @@ recomputed tokens and prefix-cache hits explain the results.
   peak-KV p95 by 26% at unchanged F1, and in-place deletion beats text compaction + re-prefill
   (same F1, 11–14% higher goodput). Chosen for step 3: `--selective kv --sel-scorer bm25
   --sel-keep 0.3 --sel-keep-last 0`.
-- **Next: selective KV step 3** (serving on a tight pool), design agreed 2026-11-18
-  (`docs/phase2_ideas.md` §4.3): default 4-profile mix, bursty arrivals at ~50/80/110% of capacity,
-  16k pool, 5 configs (fixed K*, base_fork, + selective text, + selective kv always, + kv on pressure).
-  First: implement the pressure trigger and generate the workloads, tune on dev, final on test.
+- **Step 3 tuning and headroom probe done** (`docs/phase2_ideas.md` §4.4): at 16k (default or long mix)
+  the base already reaches 93–97% of the 131k ceiling, so selective KV cannot help (compute-bound);
+  at 8k it is memory-bound and selective KV adds +18% goodput (long mix) / +15% (default mix) at equal F1.
+  Fixed a gate deadlock (requests that can never fit next to the golden slots are now refused:
+  `KVBudgetExceeded`).
+- **Next**: make golden slots evictable caches (at 8k they hold 39% of the pool and block
+  `oneshot_long`), then tune rho / fixed K on 8k + long mix (main) and 8k + default mix, then the
+  bursty final runs.
 - Development is on the AWS instance (see AWS below); the Mac is for MockLLM work.
 
 ## Phase 1 findings (A10G, 7B, 5,890 tasks)

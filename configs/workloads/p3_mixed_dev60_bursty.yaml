@@ -1,0 +1,10 @@
+# Selective KV step 3, pipeline smoke test: default mix, bursty arrivals (busy and quiet periods of
+# 15 s on average, short so that 60 tasks see several switches; quiet rate = 20% of busy rate, so the
+# mean rate is 0.6 x busy rate = 1.0 task/s). The final test-split workloads use 60 s periods and
+# ~50/80/110% of the capacity measured on dev.
+name: p3_mixed_dev60_bursty
+split: dev
+n_tasks: 60
+seed: 0
+mix: {react_short: 0.4, react_long: 0.3, react_explain: 0.2, oneshot_long: 0.1}
+arrival: {type: bursty, rate_on: 1.667, rate_off: 0.333, mean_on_s: 15, mean_off_s: 15}
