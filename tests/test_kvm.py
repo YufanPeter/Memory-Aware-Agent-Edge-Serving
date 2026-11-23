@@ -194,9 +194,10 @@ async def test_a_request_that_can_never_fit_is_refused_without_blocking_others(c
     assert llm.overflows == 0                                    # the server never saw an oversize request
 
 
-async def test_golden_slots_count_as_unfreeable_room(corpus, item):
-    """The 2026-11-23 deadlock: the request fits the pool on its own, but not next to the golden
-    slots (never evicted). It used to wait at the head of the gate forever."""
+async def test_unused_golden_slot_is_evicted_when_a_request_needs_room(corpus, item):
+    """The request fits the pool on its own but not next to every golden slot (the 2026-11-23
+    deadlock, then 11 oneshot_long failures at 8k). A golden slot nobody shares is a cache: the gate
+    erases it, and the prompt is primed again when it is next needed."""
     from edgeserve.prompt import CHATML, react_system
     peak = await footprint(corpus, item)                        # react agent alone, no fork
     explain_prefix = CHATML["system"].format(content=react_system(2, True)) + CHATML["user_open"]
@@ -206,6 +207,7 @@ async def test_golden_slots_count_as_unfreeable_room(corpus, item):
     events = EventLog()
     kvm = KVManager(llm, events, get_policy("base_fork", overcommit=100.0), pool, 8)
     agent = Agent(llm, corpus, events, kvm=kvm)
+    explain_profile = Profile(name="react_explain", few_shot=2, explain_tokens=4, delay=DELAY)
 
     async def one(task: str, profile: Profile):
         s = await kvm.admit(task, profile.name)
@@ -214,7 +216,11 @@ async def test_golden_slots_count_as_unfreeable_room(corpus, item):
         finally:
             await kvm.release(s)
 
-    explain = await one("e", Profile(name="react_explain", few_shot=2, explain_tokens=4, delay=DELAY))
-    assert explain.status == "ok" and len(kvm.golden) == 1      # its golden slot stays
+    explain = await one("e", explain_profile)
+    assert explain.status == "ok" and len(kvm.golden) == 1      # its golden slot stays as a cache
     react = await one("r", Profile(name="react_short", few_shot=2, delay=DELAY))
-    assert react.status == "ctx_overflow" and kvm.stats.refused >= 1 and not kvm.waiters
+    assert react.status == "ok" and kvm.stats.refused == 0 and not kvm.waiters
+    assert kvm.stats.give_ups.get("gate:golden") == 1           # the explain golden made room
+    assert llm.overflows == 0 and kvm.resident() <= pool
+    again = await one("e2", explain_profile)                    # needed again: primed again
+    assert again.status == "ok" and llm.overflows == 0

@@ -12,7 +12,9 @@ Its jobs, all through controls llama-server exposes over HTTP:
 3. Shared prefix (policy fork_prefix, patched server only). One "golden" slot per system prompt
    holds it; a task's slot forks it before its first request and after its KV was dropped, so
    the prefix is stored once and never re-prefilled. Accounting counts each slot's own tokens
-   (tokens - shared) plus the golden slots.
+   (tokens - shared) plus the golden slots. A golden slot is a cache, not a reservation: when a
+   request cannot fit and nothing else can be given up, a golden slot no resident slot shares is
+   erased (it is primed again, if there is room, when its prompt is next needed).
 4. Lifecycle at tool calls. While an agent waits on a tool and the pool is under pressure, its
    KV accrues rent (pool token-seconds). When the rent reaches the cost of giving the KV up
    (drop = re-prefill later, or offload = slot save + restore), the KV is given up, at most
@@ -107,6 +109,7 @@ class KVStats:
     fork_failures: int = 0
     forked_tokens: int = 0
     refused: int = 0             # requests refused: they could never fit (KVBudgetExceeded)
+    prime_skipped: int = 0       # golden slot not primed for lack of room (request prefilled its prompt)
 
 
 class KVManager:
@@ -123,6 +126,9 @@ class KVManager:
         self.stats = KVStats()
         self.golden: dict[str, tuple[int, int]] = {}     # prefix key -> (golden slot, prefix tokens)
         self.family_prefix: dict[str, int] = {}          # family -> tokens it shares through a golden slot
+        self.golden_family: dict[str, str] = {}          # prefix key -> family that forks it
+        self._priming: set[int] = set()                  # golden slots being primed right now
+        self._forking: dict[str, int] = {}               # prefix key -> forks from it in flight
         self.golden_free = list(range(n_slots - N_GOLDEN, n_slots)) if policy.fork_prefix else []
         for g in self.golden_free:
             self.recs[g].state = "reserved"
@@ -160,8 +166,43 @@ class KVManager:
         """Tokens of the golden slots: the part of the pool the gate can never free."""
         return sum(r.tokens for r in self.recs.values() if r.state == "golden")
 
+    def _pinned_golden(self, rec: SlotRec) -> int:
+        """Golden tokens the gate can never free for `rec`: the golden slot `rec` itself shares.
+        Every other golden slot can be erased once no resident slot shares it."""
+        if not rec.shared:
+            return 0
+        return sum(r.tokens for r in self.recs.values() if r.state == "golden" and r.prefix_key == rec.prefix_key)
+
     def _never_fits(self, rec: SlotRec, need: int, limit: float) -> bool:
-        return self.own(rec, need) + self.golden_tokens() > limit
+        return self.own(rec, need) + self._pinned_golden(rec) > limit
+
+    def _golden_in_use(self, key: str) -> bool:
+        return any(r.prefix_key == key and r.shared and r.tokens and r.state != "golden" for r in self.recs.values())
+
+    def _evictable_golden(self, asker: SlotRec) -> SlotRec | None:
+        """The largest golden slot no resident slot shares (never the one `asker` shares)."""
+        cands = [r for r in self.recs.values()
+                 if r.state == "golden" and r.slot not in self._priming
+                 and not self._forking.get(r.prefix_key)                      # a fork from it is in flight
+                 and not (asker.shared and r.prefix_key == asker.prefix_key)
+                 and not self._golden_in_use(r.prefix_key)]
+        return max(cands, key=lambda r: r.tokens) if cands else None
+
+    async def _evict_golden(self, g: SlotRec) -> None:
+        """Erase a golden slot (callers hold self.cond); its prompt is primed again when needed."""
+        await self._slot_op("erase", g)
+        key = g.prefix_key
+        self.golden.pop(key, None)
+        fam = self.golden_family.pop(key, None)
+        if fam is not None:
+            self.family_prefix.pop(fam, None)
+        for r in self.recs.values():      # nobody should share it; if a slot does, its cells are its own now
+            if r is not g and r.prefix_key == key and r.shared:
+                r.shared = 0
+        g.prefix_key = ""
+        self._set(g, "reserved")
+        self.golden_free.append(g.slot)
+        self.stats.give_ups["gate:golden"] = self.stats.give_ups.get("gate:golden", 0) + 1
 
     def under_pressure(self) -> bool:
         return bool(self.admit_q or self.waiters) or self.resident() >= self.policy.pressure * self.pool
@@ -205,8 +246,8 @@ class KVManager:
         (a finished task of the same family, so the system prompt is reused), then an empty
         one (nothing to lose), then another family's stale slot (its KV gets overwritten)."""
         family = family_of(profile)
-        free = [r for r in self.recs.values()
-                if r.task_id is None and r.state not in ("active", "golden", "reserved")]
+        free = [r for r in self.recs.values() if r.task_id is None and r.slot not in self._priming
+                and r.state not in ("active", "golden", "reserved")]
         if not free:
             raise RuntimeError("admission granted but no slot is free; raise the server's -np")
         same = [r for r in free if r.tokens and r.family == family]
@@ -343,6 +384,21 @@ class KVManager:
 
     # --- internals (callers hold self.cond) -------------------------------------------------
 
+    async def _try_room(self, rec: SlotRec, need: int) -> bool:
+        """Room for `need` tokens in `rec` right now, without waiting and without queue jumping:
+        give up finished or idle agents' KV only (never another golden slot, never KV of agents
+        queued at the gate). Used to prime a golden slot, which is an optimisation: if there is no
+        room, the agent simply prefills its prompt in its own slot (callers hold self.cond)."""
+        limit = (1 - self.policy.margin) * self.pool
+        if self.waiters:
+            return False
+        while self.resident() - self.own(rec, rec.tokens) + self.own(rec, need) > limit:
+            victim = self._pick_victim(rec)          # stale first, then idle (no waiters: checked above)
+            if victim is None or victim.state not in ("stale", "idle"):
+                return False
+            await self._give_up(victim, "prime")
+        return True
+
     async def _make_room(self, rec: SlotRec, need: int) -> None:
         limit = (1 - self.policy.margin) * self.pool
         if self._never_fits(rec, need, limit):
@@ -370,6 +426,10 @@ class KVManager:
                     if victim is not None:
                         await self._give_up(victim, "gate")
                         continue
+                    golden = self._evictable_golden(rec)
+                    if golden is not None:
+                        await self._evict_golden(golden)
+                        continue
                 await self.cond.wait()
         finally:
             if rec.slot in self.waiters:
@@ -390,16 +450,40 @@ class KVManager:
                 return self.golden[key]
             if not self.golden_free:
                 return None
-            g = self.golden_free.pop(0)
-            res = await self.llm.generate(prefix, 1, [], g)
-            if not res.ok:
-                self.stats.fork_failures += 1
-                return None
-            n = res.prompt_n + res.cache_n
+            est = int(len(prefix) / CHARS_PER_TOKEN_ADD) + 2
             async with self.cond:
-                self.recs[g].prefix_key = key
+                # The pool may be full (e.g. this golden slot was evicted earlier): make room through
+                # the gate like any request, giving up finished or idle agents' KV and golden slots
+                # nobody shares. A shared copy saves more than it costs. If it can never fit, skip
+                # sharing: the agent then prefills the prompt in its own slot.
+                g = self.golden_free.pop(0)
+                grec = self.recs[g]
+                self._priming.add(g)          # not a slot for tasks, not evictable, while it is primed
+                # Never evict another golden slot or wait to prime this one: two prompts would keep
+                # evicting each other (each re-prime is a full prefill), and a waiting primer would
+                # block the gate. Without room, skip sharing for this request.
+                if not await self._try_room(grec, est):
+                    self._priming.discard(g)
+                    self._set(grec, "reserved")
+                    self.golden_free.append(g)
+                    self.stats.prime_skipped += 1
+                    return None
+                grec.prefix_key = key
+                self._set(grec, "golden", tokens=est)              # counted while it is primed
+            res = await self.llm.generate(prefix, 1, [], g)
+            async with self.cond:
+                self._priming.discard(g)
+                if not res.ok:
+                    self.stats.fork_failures += 1
+                    self.recs[g].prefix_key = ""
+                    self._set(self.recs[g], "reserved")
+                    self.golden_free.append(g)
+                    self.cond.notify_all()
+                    return None
+                n = res.prompt_n + res.cache_n
                 self._set(self.recs[g], "golden", tokens=n + res.predicted_n)
-            self.golden[key] = (g, n)
+                self.golden[key] = (g, n)
+                self.cond.notify_all()
             return self.golden[key]
 
     async def _fork_prefix(self, rec: SlotRec, prefix: str) -> None:
@@ -410,15 +494,23 @@ class KVManager:
         key = self.recs[g].prefix_key
         if rec.shared and rec.prefix_key == key:
             return
-        r = await self.llm.slot_fork(rec.slot, g, n)
+        self._forking[key] = self._forking.get(key, 0) + 1     # the gate must not evict it meanwhile
+        try:
+            r = await self.llm.slot_fork(rec.slot, g, n)
+        finally:
+            self._forking[key] -= 1
         self.events.emit("slot_op", task_id=rec.task_id, **r.to_dict())
         self.stats.slot_ops["fork"] = self.stats.slot_ops.get("fork", 0) + 1
         async with self.cond:
             if r.ok:
                 self.stats.forks += 1
                 self.stats.forked_tokens += n
-                self.family_prefix[rec.family] = n
-                rec.shared, rec.prefix_key = n, key
+                if key in self.golden:
+                    self.family_prefix[rec.family] = n
+                    self.golden_family[key] = rec.family
+                    rec.shared, rec.prefix_key = n, key
+                else:   # evicted while the fork was in flight: the copied cells belong to this slot alone
+                    rec.shared, rec.prefix_key = 0, ""
                 # whatever the slot held before is gone; it now holds exactly the shared prefix
                 self._set(rec, rec.state if rec.state in RESIDENT else "ready", tokens=n)
                 if rec.ctx_tokens == 0:
@@ -531,6 +623,6 @@ class KVManager:
                 "admit_wait_s": round(s.admit_wait_s, 3), "slot_ops": s.slot_ops,
                 "slot_op_failures": s.slot_op_failures, "slot_op_ms": round(s.slot_op_ms, 1),
                 "restores_prefetched": s.restores_prefetched, "peak_resident_tokens": s.peak_resident,
-                "forks": s.forks, "fork_failures": s.fork_failures, "forked_tokens": s.forked_tokens, "refused": s.refused,
+                "forks": s.forks, "fork_failures": s.fork_failures, "forked_tokens": s.forked_tokens, "refused": s.refused, "prime_skipped": s.prime_skipped,
                 "golden_slots": {k: v[0] for k, v in self.golden.items()},
                 "pool_tokens": self.pool, "policy": self.policy.__dict__}
