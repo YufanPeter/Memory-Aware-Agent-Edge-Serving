@@ -5,9 +5,14 @@ CSE 291A course project. HotpotQA ReAct agents served by llama.cpp under a bound
 - **Phase 1** (done): an instrumented, reproducible HotpotQA agent workload replayed by a FIFO,
   fixed-concurrency runner, and measurements of what limits throughput
   ([report](docs/phase1_report.pdf), [details](docs/phase1_details.md)).
-- **Phase 2** (in progress): a KV manager that admits agents by KV budget and never overflows the
-  pool, then selective KV and a grouped KV pool. Plan: [docs/phase2_ideas.md](docs/phase2_ideas.md);
-  llama.cpp internals and measurements: [docs/phase2_notes.md](docs/phase2_notes.md).
+- **Phase 2** (experiments done, final report due 12/9): a KV manager that admits agents by KV
+  budget and never overflows the pool (the *base*), and **selective KV**: once an agent has used a
+  search result, the less relevant sentences are deleted from its KV in place (a llama-server patch),
+  with no re-prefill. On a 16k-token pool with 70% long-retrieval agents, selective KV raises peak
+  goodput by 10% over the tuned base and cuts p95 / p99 task latency by 22% / 26% at 80% load, with
+  unchanged F1 and no pool overflow. A grouped KV pool (idea B) is not implemented. Plan, results
+  and history: [docs/phase2_ideas.md](docs/phase2_ideas.md) (§4.7 for the main results); llama.cpp
+  internals and measurements: [docs/phase2_notes.md](docs/phase2_notes.md).
 
 ## Setup
 
@@ -19,8 +24,9 @@ uv run python -m scripts.build_splits        # data/splits/dev.jsonl (200), test
 uv run pytest                                # no model needed
 ```
 
-Models: Qwen2.5-7B-Instruct Q4_K_M for experiments (target: one 8 GB GPU, e.g. RTX 4060),
-Qwen2.5-1.5B-Instruct Q4_K_M for quick local checks.
+Models: Qwen2.5-7B-Instruct Q4_K_M for experiments, Qwen2.5-1.5B-Instruct Q4_K_M for quick local
+checks. Reported numbers come from an AWS g5.xlarge (A10G) with llama.cpp b11960; an 8 GB GPU such
+as an RTX 4060 is enough for smoke runs (keep `-c` at 32k or below).
 
 ```bash
 hf download Qwen/Qwen2.5-7B-Instruct-GGUF --include "qwen2.5-7b-instruct-q4_k_m*.gguf" --local-dir models
@@ -46,10 +52,27 @@ Runner options: `--delay-scale` (multiply tool latency), `--no-cache` (cache_pro
 `--no-pin` (server picks slots), `--server-pid` (sample its RSS), `--mock` (no server).
 
 Phase 2 policies (`edgeserve/policies.py`) run through the same runner, e.g.
-`--policy base --pool-tokens 16384` (the pool size must match the server's `-c`).
-`base_fork` needs the patched server (`tools/llama_patch/`). Sweeps: `scripts/sweep.py
-configs/sweeps/<name>.yaml` restarts the server for every point. Dashboards for live and finished
-runs: [tools/observability/README.md](tools/observability/README.md).
+`--policy base_fork --pool-tokens 16384 --overcommit 1.75` (the pool size must match the server's
+`-c`; `--overcommit` is rho, how far admission may book projected peaks beyond the pool). Selective
+KV: `--selective kv --sel-scorer bm25 --sel-keep 0.3 --sel-keep-last 0` (keep the 30% of each used
+observation's sentences most relevant to the question; `--selective text` is the text-deletion +
+re-prefill baseline). `base_fork` and `--selective kv` need the patched server:
+`tools/llama_patch/apply_and_build.sh ~/llama.cpp` adds the slot `fork` and `trim` actions to
+llama-server b11960. Sweeps: `scripts/sweep.py configs/sweeps/<name>.yaml` restarts the server for
+every point and skips runs that already finished. Dashboards for live and finished runs:
+[tools/observability/README.md](tools/observability/README.md).
+
+## Reproduce the Phase 2 main results
+
+```bash
+tools/llama_patch/apply_and_build.sh ~/llama.cpp   # the sweep configs expect ~/llama.cpp/build/bin/llama-server
+scripts/run_p3_main16k.sh                          # about 5 h on an A10G
+```
+
+It measures the base's and selective KV's capacity on a 16k pool (dev 200, all tasks at t=0, 2 runs
+each), builds bursty test workloads at 50 / 80 / 110% of the base's capacity, runs base, selective KV
+and fixed K=3 on them (3 rounds), and writes the reports to `results/p3_cap16k/tune.json` and
+`results/p3_main16k/main.json`.
 
 ## Scenario
 
