@@ -1,0 +1,21 @@
+# Selective KV step 3 at 16k + 70% react_long (200 dev questions at t=0), after the fork-accounting and
+# pressure-signal fixes of 2026-11-24.
+# 1. Quick check (done, 1 run each): can the base catch up with selective KV by overbooking more?
+#    Rule fixed in advance: a base run >= 29 correct tasks/min (within 5% of kv's 30.4) -> it catches up.
+#    Result: base rho 1.75 24.5, rho 2.0 22.6; kv rho 1.5 30.9 -> the base does not catch up.
+# 2. Tuning (done, results in docs/phase2_ideas.md 4.6): 2 runs per point (rho 2.0 for the base stays at 1 run: it is
+#    clearly past its peak, 148 drops). Each configuration's best point must have tested points on both
+#    sides, otherwise one more point is added outside. Fixed K 3 / 4: the Phase 1 method at 16k.
+name: p3_check16k
+defaults: {ctx: 16384, parallel: 64, workload: workloads/p3_long_dev200.json, delay_scale: 1.0, k: 8, reps: 2,
+           llama_server: ~/llama.cpp/build/bin/llama-server, sel_scorer: bm25, sel_keep: 0.3, sel_keep_last: 0}
+points:
+  - {name: base_r1.75, policy: base_fork, overcommit: 1.75}
+  - {name: base_r2.0, policy: base_fork, overcommit: 2.0, reps: 1}
+  - {name: kv_r1.5, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: base_r1.25, policy: base_fork, overcommit: 1.25}
+  - {name: base_r1.5, policy: base_fork, overcommit: 1.5}
+  - {name: kv_r1.25, policy: base_fork, overcommit: 1.25, selective: kv}
+  - {name: kv_r1.75, policy: base_fork, overcommit: 1.75, selective: kv}
+  - {name: fixed_k3, k: 3, reps: 1}
+  - {name: fixed_k4, k: 4, reps: 1}

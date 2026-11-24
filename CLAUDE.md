@@ -40,34 +40,38 @@ recomputed tokens and prefix-cache hits explain the results.
 | `docs/phase1_details.md` | Phase 1 full results, limitations, reproduction commands (Appendix A) |
 | `costmodel/README.md` | Cost model and microbenchmarks, frozen predictions vs Phase 1 calibration |
 
-## Current status (2026-11-18)
+## Current status (2026-11-24)
 
 - Phase 1 is done and merged to `main` (PR #1 from `jiawei`). The user works on Phase 2 alone.
-- **Base implemented** (`edgeserve/kvm.py`, `policies.py`, fork patch): 0 overflows in 16k-pool smoke
-  runs; formal scenarios, tuning and repeats still to do.
-- **Stage 1 done** (`docs/phase2_ideas.md` §3): trimming `react_long` observations to the paragraph
-  halves peak KV and doubles goodput at equal F1, so observation text is the main KV waste; this
-  motivates selective KV. Idea A (pressure-adaptive trimming) was dropped.
-- **Selective KV steps 1–2 done** (`docs/phase2_ideas.md` §4): the trim patch works (in-place deletion,
-  ~1.5 ms, full cache reuse, memory freed); on dev 200 (ample pool) BM25-30% "trim after use" cuts
-  peak-KV p95 by 26% at unchanged F1, and in-place deletion beats text compaction + re-prefill
-  (same F1, 11–14% higher goodput). Chosen for step 3: `--selective kv --sel-scorer bm25
-  --sel-keep 0.3 --sel-keep-last 0`.
-- **Step 3 tuning and headroom probe done** (`docs/phase2_ideas.md` §4.4): at 16k (default or long mix)
-  the base already reaches 93–97% of the 131k ceiling, so selective KV cannot help (compute-bound);
-  at 8k it is memory-bound and selective KV adds +18% goodput (long mix) / +15% (default mix) at equal F1.
-  Fixed a gate deadlock (requests that can never fit next to the golden slots are now refused:
-  `KVBudgetExceeded`).
-- **Golden slots are evictable caches** (2026-11-23): 0 overflows at 8k; a fork/evict race and golden
-  ping-pong were fixed. At 8k + default mix the selective-KV gain vanishes once the 5k-token
-  `oneshot_long` tasks actually run (nothing to trim): it helps only when memory is the bottleneck
-  AND enough KV is trimmable.
-- **Regime map done** (2026-11-24, §4.4): selective KV raises goodput in all 9 cells of pool {8k,12k,16k}
-  x react_long share {30,70,100%}, F1 unchanged. With 3 repeats: 8k + 70% long +27% (12.6 -> 16.0,
-  very stable), 16k +7-9% and more stable. Single runs vary by up to +-15% (the gate can fall into a
-  drop/re-prefill loop), so main claims need repeats. The earlier "16k is compute-bound" was wrong.
-- **Next**: main experiment on 8k + 70% long: tune fixed K {1,2,3} and rho per config on dev
-  (`configs/sweeps/p3_tune8k.yaml`), then bursty test runs, 3 repeats.
+- **Base** (`edgeserve/kvm.py`, `policies.py`, fork patch): KV-budget admission with overcommit rho, a
+  pre-request gate, and golden slots that hold the shared system prompt as evictable caches. 0 overflows in
+  every managed run. KV-manager fixes and their regression tests are in `tests/test_kvm.py` (§4.6).
+- **Stage 1** (§3): trimming `react_long` observations to the paragraph halves peak KV and doubles goodput at
+  equal F1, so observation text is the main KV waste. Idea A (pressure-adaptive trimming) was dropped.
+- **Selective KV steps 1–2** (§4.1–4.2): in-place deletion works (~1.5 ms, full cache reuse, memory freed);
+  BM25-30% "trim after use" cuts peak-KV p95 by 26% at unchanged F1 and beats text compaction + re-prefill
+  (11–14% higher goodput). Config: `--selective kv --sel-scorer bm25 --sel-keep 0.3 --sel-keep-last 0`.
+- **Step 3, finding the scenario** (§4.4–4.6): selective KV helps only when memory is the bottleneck AND
+  enough KV is trimmable (5k-token `oneshot_long` tasks leave nothing to trim). Its edge over a *tuned* base
+  equals the re-prefill cost the base pays: at 8k + 70% long the GPU is mostly idle, so the base's
+  overbooking + re-prefill is nearly free and the two tie at their own best rho (the regime map's gains were
+  against a base held at rho 1.5). rho sets concurrency only indirectly, so each configuration is compared at
+  its own best rho. Single runs vary 10–15%: claims need repeats and the rule fixed in advance (clear = gap >
+  2 x the larger sd). A longer-retrieval scenario was rejected by offline replay.
+- **Step 3 results, 16k + 70% long, all on the same final code** (§4.7):
+  - Capacity (dev 200, t=0, 2 runs, `configs/sweeps/p3_cap16k.yaml`): base rho 1.75 goodput 27.9 +- 0.4
+    (53.5 tasks/min), kv rho 1.5 30.7 +- 0.6 (59.6): **+10.2% goodput, clear**, +11.5% throughput, paired
+    dF1 -0.002. The earlier +26% (and +11% under the old pressure rule) came from code before the smoke-check
+    fixes, which made the base faster; they are no longer the claim.
+  - Main experiment (test 500, bursty, 50/80/110% of 53.5, 3 rounds, `results/p3_main16k/main.json`): at 80%
+    latency p95 -22% / p99 -26% (clear); at 110% goodput +7.6% and p95/p99 -32%/-31%, better in all 3 rounds
+    but not clear (the base varies across arrival sequences; open-loop goodput is capped by the arrival rate,
+    and 110% of the base is about kv's capacity); 50% ties although deletion runs as often (~860 trims per
+    run), so the gain comes from the freed memory. F1 unchanged (+0.001 to +0.016). vs fixed K3 at 110%:
+    goodput 1.64x, p95 41 s vs 330 s. 0 overflows in 10,500 tasks.
+- **Next**: the final report (by 12/9). Deferred: deleting whole used observations (`--sel-scorer recency
+  --sel-keep 0 --sel-keep-last 0`, offline estimate: mean KV -38% vs -21%); idea B suggested for future work
+  (the user decides).
 - Development is on the AWS instance (see AWS below); the Mac is for MockLLM work.
 
 ## Phase 1 findings (A10G, 7B, 5,890 tasks)
@@ -108,10 +112,9 @@ recomputed tokens and prefix-cache hits explain the results.
 Work one step at a time: define the scenarios (workload mix, pool sizes, question set, baselines)
 before running experiments, report, and wait for the user's go-ahead before the next step.
 
-1. Selective KV: (1) feasibility and (2) quality runs are done; (3) serving runs on a tight pool with
-   bursty arrivals and the default mix, as designed in `docs/phase2_ideas.md` §4.3.
-2. Base: formal scenarios, tune fixed K and rho on dev, repeats (can be folded into step 1.3).
-3. Idea B: ~1 day feasibility check of the grouped-stream patch, then decide.
+1. Selective KV: steps 1–3 are done (`docs/phase2_ideas.md` §4.1–4.7).
+2. Base: tuned and measured with repeats as part of step 3 (§4.5–4.7).
+3. Idea B: suggested for future work; ~1 day feasibility check of the grouped-stream patch if the user wants it.
 4. Final report and reproducibility package by 12/9.
 
 ## Decisions already made (do not reopen without the user)
@@ -147,7 +150,8 @@ before running experiments, report, and wait for the user's go-ahead before the 
 - `scripts/`: run as modules from the repo root (`uv run python -m scripts.build_corpus`);
   `scripts/start_server.sh` (env: MODEL, CTX, PARALLEL, PORT, SLOT_PATH, LLAMA_SERVER, THREADS,
   CMD_OUT, EXTRA); `scripts/sweep.py` (YAML grid in `configs/sweeps/` → server restart → runner,
-  resumable).
+  resumable); `scripts/run_p3_main16k.sh` reproduces the 16k capacity + main experiment end to end
+  (`scripts/make_p3_main_workloads.py` builds its workloads from the measured capacity).
 - Phase 2: `kvm.py` (KV manager: accounting, admission, gate, give-up/restore, fork, `kv_state`
   events) · `policies.py` (configs: baselines `fixed_k`/`per_slot`/`llamacpp`/`always_offload`,
   `base`, `base_fork`, decomposition cells) · `kvtrim.py` (selective KV: text spans -> token ranges,
@@ -158,7 +162,8 @@ before running experiments, report, and wait for the user's go-ahead before the 
   `~/llama.cpp/build/bin`, local branch `edgeserve` in `~/llama.cpp`, unpatched in `build/bin-orig`) · `tools/observability/` (exporter + Prometheus + Grafana).
 - `bench/` (E0 runtime probes, microbenchmarks, slot offload bench, `x1_speed_tax.py`,
   `x3_fork_check.py`, `s1_trim_check.py`), `analysis/` (aggregate, composition, kv_timeline,
-  phase1_figures, `check_kvm.py`, `obs_levels.py`, `selective_quality.py`), `costmodel/`, `tools/mem_aws.sh`.
+  phase1_figures, `check_kvm.py`, `obs_levels.py`, `selective_quality.py`, step 3 reports `p3_regime.py`,
+  `p3_tune.py`, `p3_main.py`), `costmodel/`, `tools/mem_aws.sh`.
 - Tests: `uv run pytest` (mock LLM, no model). Mock end-to-end:
   `uv run python -m edgeserve.runner --workload workloads/smoke.json --k 2 --mock --out results/mock`.
 - `data/`, `models/`, `results/`, `.env`, `*.pem` are gitignored and rebuilt per machine.

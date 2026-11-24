@@ -1,0 +1,8 @@
+# Selective KV step 3, smoke check before the 16k main runs: 120 dev questions (the test split stays untouched),
+# 70% react_long + 30% react_short, the 110% load of the main runs (fixed 60 s busy / quiet periods).
+name: p3_smoke16k
+split: dev
+n_tasks: 120
+seed: 9
+mix: {react_long: 0.7, react_short: 0.3}
+arrival: {type: bursty, rate_on: 1.4819, rate_off: 0.2964, mean_on_s: 60, mean_off_s: 60, fixed_periods: true}

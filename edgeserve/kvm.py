@@ -90,6 +90,7 @@ class SlotRec:
     max_ctx: int = 0             # largest context the current task has reached
     seq: int = 0                 # placement order: the most recently placed KV likely sits at the top
     gave_up: bool = False        # already released once during the current tool call
+    no_refork: bool = False      # re-forking the prefix failed for the current request: size it with the prefix
     timer: asyncio.Task | None = None
     restore: asyncio.Task | None = None
 
@@ -166,25 +167,51 @@ class KVManager:
         """Tokens of the golden slots: the part of the pool the gate can never free."""
         return sum(r.tokens for r in self.recs.values() if r.state == "golden")
 
-    def _pinned_golden(self, rec: SlotRec) -> int:
-        """Golden tokens the gate can never free for `rec`: the golden slot `rec` itself shares.
-        Every other golden slot can be erased once no resident slot shares it."""
-        if not rec.shared:
-            return 0
-        return sum(r.tokens for r in self.recs.values() if r.state == "golden" and r.prefix_key == rec.prefix_key)
+    def _golden_of(self, rec: SlotRec) -> SlotRec | None:
+        """The golden slot `rec` relies on: the one it shares now or, when its KV was given up, its family's
+        one, which it forks again before its request goes out (_refork_locked). Evicting that slot never
+        makes room for `rec`, which would then hold the same prefix itself. None when `rec` holds its own
+        copy of the prefix, or its re-fork failed."""
+        if not self.policy.fork_prefix or rec.no_refork:
+            return None
+        if rec.shared:
+            key = rec.prefix_key
+        elif rec.tokens == 0:
+            key = next((k for k, fam in self.golden_family.items() if fam == rec.family), "")
+        else:
+            return None
+        got = self.golden.get(key)
+        g = self.recs[got[0]] if got else None
+        return g if g is not None and g.state == "golden" else None
+
+    def _own_need(self, rec: SlotRec, need: int) -> int:
+        """Pool tokens of its own `rec` holds for a request of `need` tokens. A slot that forks the prefix
+        again before the request does not hold the prefix itself (sizing it with the prefix counted the
+        prefix twice, next to the golden slot it relies on, so such a request could wait forever)."""
+        g = self._golden_of(rec)
+        if g is not None and not rec.shared:
+            return max(0, need - self.golden[g.prefix_key][1])
+        return self.own(rec, need)
 
     def _never_fits(self, rec: SlotRec, need: int, limit: float) -> bool:
-        return self.own(rec, need) + self._pinned_golden(rec) > limit
+        """Even with every other slot given up, the request cannot fit next to the golden slot it relies on."""
+        g = self._golden_of(rec)
+        return self._own_need(rec, need) + (g.tokens if g is not None else 0) > limit
 
     def _golden_in_use(self, key: str) -> bool:
         return any(r.prefix_key == key and r.shared and r.tokens and r.state != "golden" for r in self.recs.values())
 
     def _evictable_golden(self, asker: SlotRec) -> SlotRec | None:
-        """The largest golden slot no resident slot shares (never the one `asker` shares)."""
+        """The largest golden slot no resident slot shares, never the one `asker` relies on (evicting that one
+        frees nothing for `asker`, which would then prefill and keep its own copy of the prefix). Another
+        family's golden slot may still go although that family has agents whose KV was given up: pinning it
+        for them could block the gate for good; they prime it again when there is room, or prefill the
+        prefix themselves."""
+        mine = self._golden_of(asker)
         cands = [r for r in self.recs.values()
                  if r.state == "golden" and r.slot not in self._priming
                  and not self._forking.get(r.prefix_key)                      # a fork from it is in flight
-                 and not (asker.shared and r.prefix_key == asker.prefix_key)
+                 and r is not mine
                  and not self._golden_in_use(r.prefix_key)]
         return max(cands, key=lambda r: r.tokens) if cands else None
 
@@ -205,7 +232,11 @@ class KVManager:
         self.stats.give_ups["gate:golden"] = self.stats.give_ups.get("gate:golden", 0) + 1
 
     def under_pressure(self) -> bool:
-        return bool(self.admit_q or self.waiters) or self.resident() >= self.policy.pressure * self.pool
+        """Memory is short: a request waits at the gate, or the pool is nearly full. Tasks waiting
+        for admission do not count: admission is bounded by reservations, so giving up resident KV
+        (or trimming it) lets none of them in. Counting them made pressure permanent whenever a
+        backlog existed, and idle agents were dropped although the pool had room."""
+        return bool(self.waiters) or self.resident() >= self.policy.pressure * self.pool
 
     def _set(self, rec: SlotRec, state: str, tokens: int | None = None) -> None:
         if tokens is not None:
@@ -294,6 +325,7 @@ class KVManager:
         if rec.restore is not None:          # a prefetch started at tool end: let it finish
             await asyncio.gather(rec.restore, return_exceptions=True)
             rec.restore = None
+        rec.no_refork = False
         if self.policy.fork_prefix and prefix and (rec.tokens == 0 or rec.ctx_tokens == 0):
             # The slot holds none of this task's context: take the system prompt from a golden slot
             # instead of prefilling (and storing) another copy of it.
@@ -302,6 +334,13 @@ class KVManager:
         async with self.cond:
             if self.policy.gate:
                 await self._make_room(rec, need)
+            if prefix and rec.state == "dropped" and rec.tokens == 0 and self._golden_of(rec) is not None:
+                # Its KV was given up while it waited, and the gate sized it without the prefix: fork it again.
+                await self._refork_locked(rec, prefix)
+                if not rec.shared:           # the fork failed: the request will prefill the prefix itself
+                    rec.no_refork = True
+                    if self.policy.gate:
+                        await self._make_room(rec, need)
             offloaded = rec.state == "offloaded"
             self.decoding += 1
             self._set(rec, "active", tokens=need)
@@ -405,7 +444,7 @@ class KVManager:
             self.stats.refused += 1
             raise KVBudgetExceeded(f"slot {rec.slot} needs {need} tokens; the pool holds {int(limit)} "
                                    f"with {self.golden_tokens()} in golden slots")
-        if self.resident() - self.own(rec, rec.tokens) + self.own(rec, need) <= limit and not self.waiters:
+        if self.resident() - self.own(rec, rec.tokens) + self._own_need(rec, need) <= limit and not self.waiters:
             return
         t0 = time.monotonic()
         prev = rec.state
@@ -419,7 +458,7 @@ class KVManager:
                     raise KVBudgetExceeded(f"slot {rec.slot} needs {need} tokens; the pool holds {int(limit)} "
                                            f"with {self.golden_tokens()} in golden slots")
                 head = self.waiters[0] == rec.slot
-                if head and self.resident() - self.own(rec, rec.tokens) + self.own(rec, need) <= limit:
+                if head and self.resident() - self.own(rec, rec.tokens) + self._own_need(rec, need) <= limit:
                     break
                 if head:
                     victim = self._pick_victim(rec)
@@ -494,30 +533,57 @@ class KVManager:
         key = self.recs[g].prefix_key
         if rec.shared and rec.prefix_key == key:
             return
-        self._forking[key] = self._forking.get(key, 0) + 1     # the gate must not evict it meanwhile
+        # The gate must not evict the golden slot until this fork is in the books, so the fork ends only
+        # once the accounting below runs under the lock. Otherwise every slot holding the copied cells
+        # would count them as its own and the books would exceed the pool.
+        self._forking[key] = self._forking.get(key, 0) + 1
+        forking = True
         try:
             r = await self.llm.slot_fork(rec.slot, g, n)
+            self.events.emit("slot_op", task_id=rec.task_id, **r.to_dict())
+            self.stats.slot_ops["fork"] = self.stats.slot_ops.get("fork", 0) + 1
+            async with self.cond:
+                self._forking[key] -= 1
+                forking = False
+                self._account_fork(rec, r, key, n, prefix)
         finally:
-            self._forking[key] -= 1
+            if forking:
+                self._forking[key] -= 1
+
+    async def _refork_locked(self, rec: SlotRec, prefix: str) -> None:
+        """The slot's KV was given up while its request waited at the gate (callers hold self.cond): take
+        the shared prefix again from the golden slot before the request goes out. Otherwise the request
+        prefills the whole prompt, system prompt included, and the agent keeps its own copy of the prefix
+        for the rest of its task while admission still credits it as shared. The fork is one control call
+        (~4 ms) made under the lock, like the erase calls of the gate."""
+        key = hashlib.sha1(prefix.encode()).hexdigest()[:12]
+        got = self.golden.get(key)
+        if got is None or self.recs[got[0]].state != "golden":
+            return
+        g, n = got
+        r = await self.llm.slot_fork(rec.slot, g, n)
         self.events.emit("slot_op", task_id=rec.task_id, **r.to_dict())
         self.stats.slot_ops["fork"] = self.stats.slot_ops.get("fork", 0) + 1
-        async with self.cond:
-            if r.ok:
-                self.stats.forks += 1
-                self.stats.forked_tokens += n
-                if key in self.golden:
-                    self.family_prefix[rec.family] = n
-                    self.golden_family[key] = rec.family
-                    rec.shared, rec.prefix_key = n, key
-                else:   # evicted while the fork was in flight: the copied cells belong to this slot alone
-                    rec.shared, rec.prefix_key = 0, ""
-                # whatever the slot held before is gone; it now holds exactly the shared prefix
-                self._set(rec, rec.state if rec.state in RESIDENT else "ready", tokens=n)
-                if rec.ctx_tokens == 0:
-                    rec.ctx_tokens, rec.ctx_chars = n, len(prefix)
-            else:
-                self.stats.fork_failures += 1
-            self.cond.notify_all()
+        self._account_fork(rec, r, key, n, prefix)
+
+    def _account_fork(self, rec: SlotRec, r: Any, key: str, n: int, prefix: str) -> None:
+        """Book a finished fork (callers hold self.cond)."""
+        if r.ok:
+            self.stats.forks += 1
+            self.stats.forked_tokens += n
+            if key in self.golden:
+                self.family_prefix[rec.family] = n
+                self.golden_family[key] = rec.family
+                rec.shared, rec.prefix_key = n, key
+            else:   # the golden slot is gone (safety net; the gate no longer evicts it mid-fork)
+                rec.shared, rec.prefix_key = 0, ""
+            # whatever the slot held before is gone; it now holds exactly the shared prefix
+            self._set(rec, rec.state if rec.state in RESIDENT else "ready", tokens=n)
+            if rec.ctx_tokens == 0:
+                rec.ctx_tokens, rec.ctx_chars = n, len(prefix)
+        else:
+            self.stats.fork_failures += 1
+        self.cond.notify_all()
 
     def _pick_victim(self, asker: SlotRec) -> SlotRec | None:
         """Finished agents' KV first, then idle agents' (cheapest to give up first, most recently

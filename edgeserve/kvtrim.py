@@ -270,8 +270,8 @@ class SelectiveKV:
     observations untouched); each observation is processed once.
 
     trigger "always":   trim at every tool call;
-    trigger "pressure": trim only while the KV manager reports memory pressure (tasks waiting for
-                        admission or room, or the pool above its pressure share). Observations left
+    trigger "pressure": trim only while the KV manager reports memory pressure (a request waiting
+                        for room at the gate, or the pool above its pressure share). Observations left
                         alone stay unprocessed and are trimmed at a later tool call under pressure."""
 
     def __init__(self, llm: Any, mechanism: str = "kv", scorer: str = "oracle", keep: float = 0.3,

@@ -1,0 +1,30 @@
+# Selective KV step 3, main scenario tuning: 8k pool, 70% react_long + 30% react_short, all 200 dev
+# questions released at t=0, 1 repeat (run-to-run sd here is ~0.7 correct tasks/min, see p3_regime).
+# Picks fixed K* and each configuration's rho* (highest goodput, no failure other than budget refusals). Selective
+# KV shrinks each agent, so admission already takes in more agents: rho is also tried below 1.5.
+name: p3_tune8k
+defaults: {ctx: 8192, parallel: 64, workload: workloads/p3_long_dev200.json, delay_scale: 1.0, k: 4,
+           llama_server: ~/llama.cpp/build/bin/llama-server, sel_scorer: bm25, sel_keep: 0.3, sel_keep_last: 0}
+points:
+  - {name: fixed_k1, k: 1}
+  - {name: fixed_k2, k: 2}
+  - {name: fixed_k3, k: 3}
+  - {name: base_r1.0, policy: base_fork, overcommit: 1.0}
+  - {name: base_r1.25, policy: base_fork, overcommit: 1.25}
+  - {name: base_r1.5, policy: base_fork, overcommit: 1.5}
+  - {name: base_r2.0, policy: base_fork, overcommit: 2.0}
+  - {name: kv_r1.0, policy: base_fork, overcommit: 1.0, selective: kv}
+  - {name: kv_r1.25, policy: base_fork, overcommit: 1.25, selective: kv}
+  - {name: kv_r1.5, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: kv_r2.0, policy: base_fork, overcommit: 2.0, selective: kv}
+  - {name: text_r1.25, policy: base_fork, overcommit: 1.25, selective: text}
+  - {name: text_r1.5, policy: base_fork, overcommit: 1.5, selective: text}
+  - {name: kvp_r1.25, policy: base_fork, overcommit: 1.25, selective: kv, sel_trigger: pressure}
+  - {name: kvp_r1.5, policy: base_fork, overcommit: 1.5, selective: kv, sel_trigger: pressure}
+  # Added after the first pass: the base was best at rho 2.0, the edge of the grid.
+  - {name: base_r2.5, policy: base_fork, overcommit: 2.5}
+  - {name: base_r3.0, policy: base_fork, overcommit: 3.0}
+  - {name: kv_r2.5, policy: base_fork, overcommit: 2.5, selective: kv}
+  - {name: kv_r3.0, policy: base_fork, overcommit: 3.0, selective: kv}
+  - {name: text_r2.0, policy: base_fork, overcommit: 2.0, selective: text}
+  - {name: kvp_r2.0, policy: base_fork, overcommit: 2.0, selective: kv, sel_trigger: pressure}

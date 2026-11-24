@@ -224,3 +224,113 @@ async def test_unused_golden_slot_is_evicted_when_a_request_needs_room(corpus, i
     assert llm.overflows == 0 and kvm.resident() <= pool
     again = await one("e2", explain_profile)                    # needed again: primed again
     assert again.status == "ok" and llm.overflows == 0
+
+
+async def test_golden_slot_stays_until_a_fork_is_accounted_for():
+    """The fork/evict race behind books above the pool at rho >= 2 (2026-11-24): the server call
+    returned, the fork stopped protecting the golden slot, and the gate, holding the lock, evicted it
+    before the fork's accounting ran. The golden slot must stay unevictable until then."""
+    pool = 100_000
+    llm = MockLLM(two_searches, decode_s_per_token=2e-4, pool_tokens=pool)
+    kvm = KVManager(llm, EventLog(), get_policy("base_fork"), pool, 8)
+    prefix = "<|im_start|>system\n" + "Solve the task step by step. " * 40
+    assert await kvm._golden_slot(prefix) is not None          # primed beforehand, as in a run
+    a = kvm.recs[await kvm.admit("a", "react_short")]
+    b = kvm.recs[await kvm.admit("b", "react_short")]
+    async with kvm.cond:                                        # the gate holds the lock meanwhile
+        fork = asyncio.create_task(kvm._fork_prefix(a, prefix))
+        await asyncio.sleep(0.01)                              # server call done, books not yet
+        assert kvm._evictable_golden(b) is None
+    await fork
+    assert a.shared and kvm._evictable_golden(b) is None       # now protected because `a` shares it
+    assert kvm.resident() == llm.resident_tokens()
+
+
+def test_waiting_for_admission_is_not_memory_pressure():
+    """Admission is bounded by reservations, so a backlog alone must not make idle agents give up KV
+    (all 103 drops of base_r1.0 at 8k were of this kind)."""
+    pool = 10_000
+    kvm = KVManager(MockLLM(two_searches, pool_tokens=pool), EventLog(), get_policy("base_fork"), pool, 4)
+    kvm.admit_q.append("t9")
+    assert not kvm.under_pressure()
+    kvm.waiters.append(0)
+    assert kvm.under_pressure()
+
+
+async def test_a_dropped_agent_never_evicts_its_own_golden_slot():
+    """An agent whose KV was dropped no longer shares the golden slot, but forks it again before its request
+    goes out, so the gate must not evict that slot for it (2026-11-24 bursty smoke run: the golden slot was
+    gone half the time and half the agents carried their own copy of the prefix). Another family may still
+    evict it: pinning it for dropped agents could block the gate for good."""
+    pool = 100_000
+    llm = MockLLM(two_searches, decode_s_per_token=2e-4, pool_tokens=pool)
+    kvm = KVManager(llm, EventLog(), get_policy("base_fork"), pool, 8)
+    prefix = "<|im_start|>system\n" + "Solve the task step by step. " * 40
+    a = kvm.recs[await kvm.admit("a", "react_long")]
+    await kvm._fork_prefix(a, prefix)
+    b = kvm.recs[await kvm.admit("b", "oneshot_long")]
+    async with kvm.cond:
+        await kvm._give_up(a, "gate")
+        assert a.state == "dropped" and not a.shared and a.task_id == "a"
+        assert kvm._evictable_golden(a) is None                 # a relies on it
+        assert kvm._evictable_golden(b) is not None             # no resident slot shares it
+
+
+async def test_a_request_dropped_at_the_gate_is_sized_without_the_prefix():
+    """Review of 2026-11-24: an agent dropped while it waited was sized with its own copy of the prefix next to
+    the golden slot it relies on, counting the prefix twice; a large request then waited forever."""
+    pool = 8000
+    llm = MockLLM(two_searches, decode_s_per_token=2e-4, pool_tokens=pool)
+    kvm = KVManager(llm, EventLog(), get_policy("base_fork"), pool, 8)
+    prefix = "<|im_start|>system\n" + "Solve the task step by step. " * 200
+    a = kvm.recs[await kvm.admit("a", "react_long")]
+    await kvm._fork_prefix(a, prefix)
+    n = a.shared
+    g_tokens = kvm.recs[kvm.golden[a.prefix_key][0]].tokens
+    need = int(0.97 * pool - g_tokens + n // 2)     # fits once the prefix is forked again, not if counted twice
+    async with kvm.cond:
+        await kvm._give_up(a, "gate")
+        await asyncio.wait_for(kvm._make_room(a, need), timeout=2)
+        await kvm._refork_locked(a, prefix)
+    assert a.shared == n and kvm.stats.refused == 0
+
+
+async def test_another_familys_golden_slot_makes_room_although_that_family_has_dropped_agents():
+    """Review of 2026-11-24: pinning a golden slot for every in-flight task of its family could block the
+    gate for good when the request at its head can only fit once another family's golden slot goes."""
+    pool = 8000
+    llm = MockLLM(two_searches, decode_s_per_token=2e-4, pool_tokens=pool)
+    kvm = KVManager(llm, EventLog(), get_policy("base_fork"), pool, 8)
+    a = kvm.recs[await kvm.admit("a", "react_long")]
+    await kvm._fork_prefix(a, "<|im_start|>system\nReact. " + "Think and act. " * 300)
+    e = kvm.recs[await kvm.admit("e", "react_explain")]
+    await kvm._fork_prefix(e, "<|im_start|>system\nExplain. " + "Explain each step. " * 250)
+    gr = kvm.recs[kvm.golden[a.prefix_key][0]].tokens
+    ge = kvm.recs[kvm.golden[e.prefix_key][0]].tokens
+    need = int(0.97 * pool - gr + a.shared - ge // 2)   # fits next to a's golden slot, not next to both
+    async with kvm.cond:
+        await kvm._give_up(e, "gate")                     # e is dropped but still in flight
+        await asyncio.wait_for(kvm._make_room(a, need), timeout=2)
+    assert kvm.stats.give_ups.get("gate:golden") == 1 and kvm.stats.refused == 0
+    assert kvm.resident() == llm.resident_tokens()
+
+
+async def test_an_agent_dropped_at_the_gate_takes_the_shared_prefix_again(corpus, item):
+    """KV given up while a request waits at the gate (a victim for the agent ahead of it): the request must
+    fork the system prompt again instead of prefilling it, or the agent keeps its own copy of the prefix
+    while admission credits it as shared (2026-11-24 bursty smoke run: a drop loop, ~470 drops)."""
+    pool = 100_000
+    llm = MockLLM(two_searches, decode_s_per_token=2e-4, pool_tokens=pool)
+    kvm = KVManager(llm, EventLog(), get_policy("base_fork"), pool, 8)
+    prefix = "<|im_start|>system\n" + "Solve the task step by step. " * 40
+    a = kvm.recs[await kvm.admit("a", "react_long")]
+    await kvm.before_generate(a.slot, len(prefix) + 200, 16, prefix)
+    assert a.shared and a.state == "active"
+    async with kvm.cond:                       # what the gate does to a waiting victim
+        kvm.decoding -= 1
+        kvm._set(a, "waiting")
+        await kvm._give_up(a, "gate")
+        assert a.state == "dropped" and not a.shared
+        await kvm._refork_locked(a, prefix)
+    assert a.shared and a.state == "ready"
+    assert kvm.resident() == llm.resident_tokens()

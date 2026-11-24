@@ -1,0 +1,12 @@
+# Selective KV step 3: the base's capacity at 16k on the final code (after the fork-accounting, pressure-signal,
+# golden-eviction and re-fork fixes of 2026-11-24), to set the main experiment's load levels. Same setting as
+# the 16k tuning: 70% react_long + 30% react_short, 200 dev questions at t=0, base rho 1.75, 2 runs.
+# Added after the main experiment (user's go-ahead, 2026-11-24): selective KV's capacity on the same final code
+# (kv rho 1.5, 2 runs), so the peak-goodput comparison uses one code version. Rule fixed in advance (4.5): the gap
+# is clear when it exceeds 2 x the larger sd. Report: uv run python -m analysis.p3_tune results/p3_cap16k
+name: p3_cap16k
+defaults: {ctx: 16384, parallel: 64, workload: workloads/p3_long_dev200.json, delay_scale: 1.0, k: 8, reps: 2,
+           llama_server: ~/llama.cpp/build/bin/llama-server, sel_scorer: bm25, sel_keep: 0.3, sel_keep_last: 0}
+points:
+  - {name: base_r1.75, policy: base_fork, overcommit: 1.75}
+  - {name: kv_r1.5, policy: base_fork, overcommit: 1.5, selective: kv}

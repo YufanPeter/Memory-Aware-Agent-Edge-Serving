@@ -12,7 +12,8 @@ Spec:
     arrival: {type: poisson, rate: 0.5}      # tasks/s
            | {type: batch}                   # all at t=0
            | {type: uniform, interval: 2.0}
-           | {type: bursty, rate_on: 2.0, rate_off: 0.1, mean_on_s: 10, mean_off_s: 30}
+           | {type: bursty, rate_on: 2.0, rate_off: 0.1, mean_on_s: 10, mean_off_s: 30
+              [, fixed_periods: true]}
 """
 from __future__ import annotations
 
@@ -40,13 +41,18 @@ def arrivals(cfg: dict[str, Any], n: int, rng: random.Random) -> list[float]:
             t += rng.expovariate(cfg["rate"])
         return out
     if kind == "bursty":   # two-state MMPP: alternating on/off periods with different rates
+        # Period lengths are exponential by default; fixed_periods: true makes them exactly
+        # mean_on_s / mean_off_s, so a few hundred tasks realize the intended mean rate (random
+        # periods over only ~10 cycles can miss it by 20-40%).
+        fixed = cfg.get("fixed_periods", False)
+        length = lambda mean: mean if fixed else rng.expovariate(1.0 / mean)  # noqa: E731
         t, out, on = 0.0, [], True
-        period_end = rng.expovariate(1.0 / cfg["mean_on_s"])
+        period_end = length(cfg["mean_on_s"])
         while len(out) < n:
             gap = rng.expovariate(cfg["rate_on"] if on else cfg["rate_off"])
             if t + gap > period_end:
                 t, on = period_end, not on
-                period_end = t + rng.expovariate(1.0 / (cfg["mean_on_s"] if on else cfg["mean_off_s"]))
+                period_end = t + length(cfg["mean_on_s"] if on else cfg["mean_off_s"])
                 continue
             t += gap
             out.append(t)

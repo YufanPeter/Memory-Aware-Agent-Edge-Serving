@@ -1,0 +1,10 @@
+# Selective KV step 3, smoke check of the 16k main experiment (docs/phase2_ideas.md 4.6): the three main
+# configurations on 120 dev tasks at the 110% bursty load. Pass: 0 server overflows or purges, the manager's
+# books never above the pool, every task completed, realized load near plan, analysis.p3_main prints its table.
+name: p3_smoke16k
+defaults: {ctx: 16384, parallel: 64, workload: workloads/p3_smoke16k.json, delay_scale: 1.0, k: 8,
+           llama_server: ~/llama.cpp/build/bin/llama-server, sel_scorer: bm25, sel_keep: 0.3, sel_keep_last: 0}
+points:
+  - {name: r1_l110_base, policy: base_fork, overcommit: 1.75}
+  - {name: r1_l110_kv, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: r1_l110_fixedk3, k: 3}

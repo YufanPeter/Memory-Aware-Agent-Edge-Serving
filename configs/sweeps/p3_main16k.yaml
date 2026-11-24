@@ -1,0 +1,32 @@
+# Selective KV step 3, main experiment at 16k (docs/phase2_ideas.md 4.6). Test split, 500 tasks (350 react_long +
+# 150 react_short), bursty arrivals with fixed 60 s busy / quiet periods at 50 / 80 / 110% of the base's dev capacity on the
+# final code (configs/sweeps/p3_cap16k.yaml -> results/p3_main16k_capacity.txt; scripts/run_p3_main16k.sh runs it all). Parameters from the 16k tuning, not tuned further: base rho 1.75, base + selective KV (BM25 keep
+# 30%, trim after use) rho 1.5, fixed K3 (Phase 1 method, largest K without failures). Three rounds run one after
+# another (round r uses workload seed r-1 for every configuration); fixed K3 runs in round 1 only.
+# Decision rule fixed in advance (docs/phase2_ideas.md 4.5): goodput compared at 110% only; task latency p95 / p99
+# (all 500 tasks) at 80% and 110%; clear = |mean gap| > 2 x the larger sd. Report: uv run python -m analysis.p3_main
+name: p3_main16k
+defaults: {ctx: 16384, parallel: 64, delay_scale: 1.0, k: 8, llama_server: ~/llama.cpp/build/bin/llama-server,
+           sel_scorer: bm25, sel_keep: 0.3, sel_keep_last: 0}
+points:
+  - {name: r1_l110_base, workload: workloads/p3_main16k_l110_s0.json, policy: base_fork, overcommit: 1.75}
+  - {name: r1_l110_kv, workload: workloads/p3_main16k_l110_s0.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: r1_l110_fixedk3, workload: workloads/p3_main16k_l110_s0.json, k: 3}
+  - {name: r1_l80_base, workload: workloads/p3_main16k_l80_s0.json, policy: base_fork, overcommit: 1.75}
+  - {name: r1_l80_kv, workload: workloads/p3_main16k_l80_s0.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: r1_l80_fixedk3, workload: workloads/p3_main16k_l80_s0.json, k: 3}
+  - {name: r1_l50_base, workload: workloads/p3_main16k_l50_s0.json, policy: base_fork, overcommit: 1.75}
+  - {name: r1_l50_kv, workload: workloads/p3_main16k_l50_s0.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: r1_l50_fixedk3, workload: workloads/p3_main16k_l50_s0.json, k: 3}
+  - {name: r2_l110_base, workload: workloads/p3_main16k_l110_s1.json, policy: base_fork, overcommit: 1.75}
+  - {name: r2_l110_kv, workload: workloads/p3_main16k_l110_s1.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: r2_l80_base, workload: workloads/p3_main16k_l80_s1.json, policy: base_fork, overcommit: 1.75}
+  - {name: r2_l80_kv, workload: workloads/p3_main16k_l80_s1.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: r2_l50_base, workload: workloads/p3_main16k_l50_s1.json, policy: base_fork, overcommit: 1.75}
+  - {name: r2_l50_kv, workload: workloads/p3_main16k_l50_s1.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: r3_l110_base, workload: workloads/p3_main16k_l110_s2.json, policy: base_fork, overcommit: 1.75}
+  - {name: r3_l110_kv, workload: workloads/p3_main16k_l110_s2.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: r3_l80_base, workload: workloads/p3_main16k_l80_s2.json, policy: base_fork, overcommit: 1.75}
+  - {name: r3_l80_kv, workload: workloads/p3_main16k_l80_s2.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: r3_l50_base, workload: workloads/p3_main16k_l50_s2.json, policy: base_fork, overcommit: 1.75}
+  - {name: r3_l50_kv, workload: workloads/p3_main16k_l50_s2.json, policy: base_fork, overcommit: 1.5, selective: kv}
