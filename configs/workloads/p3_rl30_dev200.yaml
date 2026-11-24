@@ -1,0 +1,8 @@
+# Selective KV step 3, regime map: react_long share 30% (rest react_short: agents with short
+# observations, little to trim), all 200 dev questions, released at t=0 (closed loop).
+name: p3_rl30_dev200
+split: dev
+n_tasks: 200
+seed: 0
+mix: {react_long: 0.3, react_short: 0.7}
+arrival: {type: batch}

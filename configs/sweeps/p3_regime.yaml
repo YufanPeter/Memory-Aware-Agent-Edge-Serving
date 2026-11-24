@@ -1,0 +1,30 @@
+# Selective KV step 3, regime map: where does selective KV help? Pool size (memory pressure) x
+# react_long share (how much KV is trimmable; the rest is react_short). Each cell: the base and
+# base + selective KV (kv, BM25 keep 30%, trim after use), both at rho 1.5, same 200 dev questions,
+# all released at t=0, 1 repeat. Ceilings: 131k pool, fixed K = 8 (Phase 1 best), per share, to
+# measure how memory-bound the base is (base / ceiling). Ordered by importance: 8k, 12k, 16k, ceilings.
+name: p3_regime
+defaults: {parallel: 64, delay_scale: 1.0, k: 8, llama_server: ~/llama.cpp/build/bin/llama-server,
+           sel_scorer: bm25, sel_keep: 0.3, sel_keep_last: 0}
+points:
+  - {name: c8k_rl30_base, ctx: 8192, workload: workloads/p3_rl30_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c8k_rl30_kv, ctx: 8192, workload: workloads/p3_rl30_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: c8k_rl70_base, ctx: 8192, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c8k_rl70_kv, ctx: 8192, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: c8k_rl100_base, ctx: 8192, workload: workloads/p3_rl100_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c8k_rl100_kv, ctx: 8192, workload: workloads/p3_rl100_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: c12k_rl30_base, ctx: 12288, workload: workloads/p3_rl30_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c12k_rl30_kv, ctx: 12288, workload: workloads/p3_rl30_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: c12k_rl70_base, ctx: 12288, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c12k_rl70_kv, ctx: 12288, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: c12k_rl100_base, ctx: 12288, workload: workloads/p3_rl100_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c12k_rl100_kv, ctx: 12288, workload: workloads/p3_rl100_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: c16k_rl30_base, ctx: 16384, workload: workloads/p3_rl30_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c16k_rl30_kv, ctx: 16384, workload: workloads/p3_rl30_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: c16k_rl70_base, ctx: 16384, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c16k_rl70_kv, ctx: 16384, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: c16k_rl100_base, ctx: 16384, workload: workloads/p3_rl100_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c16k_rl100_kv, ctx: 16384, workload: workloads/p3_rl100_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: ceiling_rl30, ctx: 131072, workload: workloads/p3_rl30_dev200.json}
+  - {name: ceiling_rl70, ctx: 131072, workload: workloads/p3_long_dev200.json}
+  - {name: ceiling_rl100, ctx: 131072, workload: workloads/p3_rl100_dev200.json}

@@ -62,9 +62,12 @@ recomputed tokens and prefix-cache hits explain the results.
   ping-pong were fixed. At 8k + default mix the selective-KV gain vanishes once the 5k-token
   `oneshot_long` tasks actually run (nothing to trim): it helps only when memory is the bottleneck
   AND enough KV is trimmable.
-- **Next** (`docs/phase2_ideas.md` §4.4): (1) regime map: pool {8k, 12k, 16k} x react_long share
-  {30, 70, 100%}, base vs base + kv; (2) main experiment on 8k + long mix: tune fixed K and rho on
-  dev, then bursty test runs (5 configs x 3 loads x 2).
+- **Regime map done** (2026-11-24, §4.4): selective KV raises goodput in all 9 cells of pool {8k,12k,16k}
+  x react_long share {30,70,100%}, F1 unchanged. With 3 repeats: 8k + 70% long +27% (12.6 -> 16.0,
+  very stable), 16k +7-9% and more stable. Single runs vary by up to +-15% (the gate can fall into a
+  drop/re-prefill loop), so main claims need repeats. The earlier "16k is compute-bound" was wrong.
+- **Next**: main experiment on 8k + 70% long: tune fixed K {1,2,3} and rho per config on dev
+  (`configs/sweeps/p3_tune8k.yaml`), then bursty test runs, 3 repeats.
 - Development is on the AWS instance (see AWS below); the Mac is for MockLLM work.
 
 ## Phase 1 findings (A10G, 7B, 5,890 tasks)

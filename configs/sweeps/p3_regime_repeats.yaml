@@ -1,0 +1,13 @@
+# Selective KV step 3, regime map repeats: three key cells (8k/70%, 16k/70%, 16k/30%), base and
+# base + kv, 3 repeats each. Same sweep name as p3_regime, so rep0 (already run) is skipped and only
+# rep1 and rep2 run. Purpose: measure run-to-run variance (the gate can fall into a drop/re-prefill
+# loop near the rho cliff) before fixing the main experiment's repeats and rho.
+name: p3_regime
+defaults: {parallel: 64, delay_scale: 1.0, k: 8, llama_server: ~/llama.cpp/build/bin/llama-server, sel_scorer: bm25, sel_keep: 0.3, sel_keep_last: 0, reps: 3}
+points:
+  - {name: c8k_rl70_base, ctx: 8192, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c8k_rl70_kv, ctx: 8192, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: c16k_rl30_base, ctx: 16384, workload: workloads/p3_rl30_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c16k_rl30_kv, ctx: 16384, workload: workloads/p3_rl30_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: c16k_rl70_base, ctx: 16384, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5}
+  - {name: c16k_rl70_kv, ctx: 16384, workload: workloads/p3_long_dev200.json, policy: base_fork, overcommit: 1.5, selective: kv}
