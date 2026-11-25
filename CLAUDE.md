@@ -27,7 +27,13 @@ Evaluation: goodput (correct tasks/min) and p95/p99 latency at a fixed KV budget
 metrics, with request-level TTFT and TPOT p50/p95 to explain latency. Completed count, failures,
 EM/F1 and output length are constraints that every performance table reports (quality is a
 guardrail, not the objective; ±0.03 F1 counts as unchanged). KV occupancy, idle-KV share,
-recomputed tokens and prefix-cache hits explain the results.
+recomputed tokens and prefix-cache hits explain the results. For the topic (memory-aware agent edge serving),
+`analysis/run_metrics.py` adds in-flight agents, KV per in-flight agent, KV left by finished tasks, pressure actions,
+the latency split into admission wait and service time, LLM calls per task, forced finishes, and edge resources
+(GPU memory peak, GPU utilisation, host RSS; power is not recorded), all offline from run logs (docs/phase2_ideas.md §0).
+Token counts there are the server's (prompt_n / cache_n / predicted_n, trim and fork tokens): KV occupancy replays the
+manager's kv_state with measured tokens (the manager's books stay the safety check), recompute is measured, except for
+text deletion (deleted tokens are not logged), where it is an estimate cross-checked two ways.
 
 ### Documents (read these before planning work)
 
@@ -170,7 +176,7 @@ before running experiments, report, and wait for the user's go-ahead before the 
 - `bench/` (E0 runtime probes, microbenchmarks, slot offload bench, `x1_speed_tax.py`,
   `x3_fork_check.py`, `s1_trim_check.py`), `analysis/` (aggregate, composition, kv_timeline,
   phase1_figures, `check_kvm.py`, `obs_levels.py`, `selective_quality.py`, step 3 reports `p3_regime.py`,
-  `p3_tune.py`, `p3_main.py`), `costmodel/`, `tools/mem_aws.sh`.
+  `p3_tune.py`, `p3_main.py`, per-run topic metrics `run_metrics.py`), `costmodel/`, `tools/mem_aws.sh`.
 - Tests: `uv run pytest` (mock LLM, no model). Mock end-to-end:
   `uv run python -m edgeserve.runner --workload workloads/smoke.json --k 2 --mock --out results/mock`.
 - `data/`, `models/`, `results/`, `.env`, `*.pem` are gitignored and rebuilt per machine.

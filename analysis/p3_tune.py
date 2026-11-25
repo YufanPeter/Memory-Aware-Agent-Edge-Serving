@@ -11,7 +11,8 @@ could overflow). The selective configurations' best is then compared with the ba
 fixed in advance (docs/phase2_ideas.md section 4.5): the gap is clear when it exceeds twice the larger
 standard deviation of the two. In this closed-loop tuning run
 every task arrives at t=0, so task latency is mostly queueing; service time (admission to done)
-is the per-task cost.
+is the per-task cost. A second table gives the topic metrics of analysis/run_metrics.py (memory, recompute,
+agent, edge), averaged over each point's runs.
 """
 from __future__ import annotations
 
@@ -22,19 +23,20 @@ from pathlib import Path
 from typing import Any
 
 from analysis.obs_levels import bootstrap_ci, pct
+from analysis.run_metrics import run_metrics
 
 PROFILES = ("react_short", "react_long", "react_explain", "oneshot_long")
 
 
-def load(run: Path) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+def load(run: Path) -> tuple[dict[str, Any], list[dict[str, Any]], Path] | None:
     if not (run / "summary.json").exists():
         return None
     s = json.loads((run / "summary.json").read_text(encoding="utf-8"))
     tasks = [json.loads(x) for x in (run / "tasks.jsonl").read_text(encoding="utf-8").splitlines() if x]
-    return s, tasks
+    return s, tasks, run
 
 
-def row(s: dict[str, Any], tasks: list[dict[str, Any]]) -> dict[str, Any]:
+def row(s: dict[str, Any], tasks: list[dict[str, Any]], run: Path) -> dict[str, Any]:
     km = s.get("kvm") or {}
     gu = km.get("give_ups", {})
     service = [t["service_s"] for t in tasks]
@@ -51,6 +53,7 @@ def row(s: dict[str, Any], tasks: list[dict[str, Any]]) -> dict[str, Any]:
     for p in PROFILES:
         f = [t["f1"] for t in tasks if t["profile"] == p]
         out[f"f1_{p}"] = round(st.mean(f), 3) if f else None
+    out.update({f"m_{k}": v for k, v in run_metrics(run).items()})
     return out
 
 
@@ -100,7 +103,7 @@ def main() -> None:
             for p in sorted(root.iterdir()) if p.is_dir()}
     runs = {k: v for k, v in runs.items() if v}
     rows = {k: mean_row([row(*x) for x in v]) for k, v in runs.items()}
-    f1s = {k: task_f1([tasks for _, tasks in v]) for k, v in runs.items()}
+    f1s = {k: task_f1([x[1] for x in v]) for k, v in runs.items()}
 
     print(f"{'point':10} {'done':>5} {'fail':>4} {'ref':>3} {'goodput':>7} {'thru':>6} {'svc p50/p95':>11} {'TTFT95':>6} "
           f"{'TPOT50':>6} {'drops':>5} {'trims':>5} {'defer':>5} {'trimmed':>7} {'peak':>6} {'F1':>6} "
@@ -111,6 +114,19 @@ def main() -> None:
               f"{r['drops']:>5} {r['trims']:>5} {r['trim_deferred']:>5} {r['trim_tokens']:>7} "
               f"{r['peak_resident'] or 0:>6} {r['f1']:>6.3f} "
               + " ".join(f"{r['f1_' + p] if r['f1_' + p] is not None else float('nan'):>6.3f}" for p in PROFILES))
+
+    print("\nmemory / recompute / agent / edge (analysis/run_metrics.py; means over runs)")
+    print(f"{'point':10} {'KV mean/peak':>13} {'pool%':>5} {'agents':>6} {'KV/agent':>8} {'idle':>5} {'drops':>5} "
+          f"{'gwait s':>7} {'trimKV':>7} {'recomp':>6} {'prefill':>7} {'hit':>5} {'admit p95':>9} {'calls':>5} "
+          f"{'forced':>6} {'EM':>5} {'out':>4} {'GPU MiB':>7} {'util':>4} {'RSS':>5}")
+    for k, r in rows.items():
+        g = lambda x: r.get(f"m_{x}") or 0  # noqa: E731
+        print(f"{k:10} {g('kv_mean'):>6.0f}/{g('kv_peak'):<6.0f} {g('kv_mean_share'):>5.0%} {g('agents_mean'):>6.2f} "
+              f"{g('kv_per_agent'):>8.0f} {g('idle_share'):>5.2f} {g('drops'):>5.0f} {g('gate_wait_s'):>7.1f} "
+              f"{g('trim_kv_tokens'):>7.0f} {g('recompute_per_task'):>6.0f} {g('prefill_per_task'):>7.0f} "
+              f"{g('cache_hit_rate'):>5.2f} {g('admit_wait_p95'):>9.1f} {g('llm_calls_per_task'):>5.2f} "
+              f"{g('forced_share'):>6.1%} {g('em'):>5.3f} {g('output_tokens_per_request'):>4.0f} "
+              f"{g('gpu_mem_peak_mib'):>7.0f} {g('gpu_util_mean'):>4.0f} {g('host_rss_peak_mib'):>5.0f}")
 
     best: dict[str, str] = {}
     for k, r in rows.items():

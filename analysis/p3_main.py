@@ -10,9 +10,9 @@ configurations. F1: paired per task within each round (same workload), pooled ov
     uv run python -m analysis.p3_main results/p3_main16k --capacity 53.5 [--json out.json]
 
 Point names: r<round>_l<load>_<config>, e.g. r1_l110_base, r2_l80_kv, r1_l50_fixedk3.
-Idle-KV share = pool token-seconds held by agents inside a tool call / all resident token-seconds. For the
-managed configurations it is rebuilt from kv_state events (they know about drops, trims and the shared
-prefix); fixed K has no KV manager and uses the Phase 1 reconstruction (analysis/kv_timeline.py).
+A second table gives the topic metrics of analysis/run_metrics.py (memory, recompute, agent, edge); their
+definitions are in that module. Idle-KV share = pool token-seconds held by agents inside a tool call / all
+resident token-seconds.
 """
 from __future__ import annotations
 
@@ -23,34 +23,12 @@ import statistics as st
 from pathlib import Path
 from typing import Any
 
-from analysis import kv_timeline
 from analysis.check_kvm import check
 from analysis.obs_levels import bootstrap_ci
+from analysis.run_metrics import run_metrics
 
 NAME = re.compile(r"r(\d+)_l(\d+)_(\w+)$")
 CYCLE_S = 120.0   # one busy + one quiet period
-
-
-def idle_share_from_kv_state(events: Path) -> float | None:
-    """Share of resident pool token-seconds held by idle agents (owner in a tool call)."""
-    slots: dict[int, tuple[str, int, int]] = {}   # slot -> (state, tokens, shared)
-    tok_s = {"idle": 0.0, "all": 0.0}
-    last_t = None
-    with open(events, encoding="utf-8") as f:
-        for line in f:
-            if '"kv_state"' not in line:
-                continue
-            e = json.loads(line)
-            if last_t is not None:
-                dt = e["t"] - last_t
-                for state, tokens, shared in slots.values():
-                    own = tokens - min(shared, tokens) if state != "golden" else tokens
-                    tok_s["all"] += own * dt
-                    if state == "idle":
-                        tok_s["idle"] += own * dt
-            last_t = e["t"]
-            slots[e["slot"]] = (e["to"], e["tokens"], e.get("shared", 0))
-    return round(tok_s["idle"] / tok_s["all"], 4) if tok_s["all"] else None
 
 
 def realized_load(tasks: list[dict[str, Any]], capacity: float) -> float | None:
@@ -68,10 +46,7 @@ def one_run(run: Path, capacity: float) -> dict[str, Any]:
     km = s.get("kvm") or {}
     gu = km.get("give_ups", {})
     safety = check(run)
-    if km:
-        idle = idle_share_from_kv_state(run / "events.jsonl")
-    else:
-        idle = kv_timeline.analyze(run)["share"]["idle_tool"]
+    m = run_metrics(run)
     return {
         "goodput": s["steady_goodput_per_min"], "throughput": s["steady_throughput_per_min"],
         "lat_p50": s["latency_p50_s"], "lat_p95": s["latency_p95_s"], "lat_p99": s["latency_p99_s"],
@@ -79,11 +54,12 @@ def one_run(run: Path, capacity: float) -> dict[str, Any]:
         "tpot_p50": s["tpot_p50_ms"], "tpot_p95": s["tpot_p95_ms"],
         "completed": s["completed"], "failed": s["failed"], "refused": km.get("refused", 0),
         "f1": s["f1"], "drops": sum(v for k, v in gu.items() if k.endswith(":drop")),
-        "gate_wait_s": km.get("gate_wait_s", 0.0), "idle_share": idle,
+        "gate_wait_s": km.get("gate_wait_s", 0.0), "idle_share": m["idle_share"],
         "peak_books": km.get("peak_resident_tokens"), "pool": km.get("pool_tokens"),
         "server_overflows": safety["server_overflows"], "server_purges": safety["server_purges"],
         "load": realized_load(tasks, capacity), "trims": s.get("trims", 0),
         "_f1": {t["task_id"]: (t["profile"], t["f1"]) for t in tasks},
+        **{f"m_{k}": v for k, v in m.items() if k not in ("idle_share", "drops", "gate_wait_s", "refused", "trims")},
     }
 
 
@@ -156,6 +132,20 @@ def main() -> None:
               f"{r['completed']:>5.0f} {r['failed']:>4.0f} {r['f1']:>5.3f} {r['drops']:>6.0f} {r['gate_wait_s']:>6.0f} "
               f"{(r['idle_share'] or 0):>5.2f} {(r['peak_books'] or 0):>6.0f} {r['server_overflows']:>3.0f} "
               f"{(r['load'] or 0):>5.0%}")
+
+    print("\nmemory / recompute / agent / edge (analysis/run_metrics.py; means over runs)")
+    print(f"{'load':5} {'config':8} {'KV mean/peak':>13} {'pool%':>5} {'agents':>6} {'KV/agent':>8} {'prefix':>6} "
+          f"{'gwaits':>6} {'trimKV':>7} {'recomp':>6} {'prefill':>7} {'hit':>5} {'admit p50/p95':>13} "
+          f"{'svc p50/p95':>11} {'calls':>5} {'forced':>6} {'EM':>5} {'out':>5} {'GPU MiB':>7} {'util':>4} {'RSS':>5}")
+    for (load, cfg), _ in sorted(runs.items()):
+        r = rows[f"l{load}_{cfg}"]
+        g = lambda k: r.get(f"m_{k}") or 0  # noqa: E731
+        print(f"{load:>4}% {cfg:8} {g('kv_mean'):>6.0f}/{g('kv_peak'):<6.0f} {g('kv_mean_share'):>5.0%} {g('agents_mean'):>6.2f} "
+              f"{g('kv_per_agent'):>8.0f} {g('shared_prefix_tokens'):>6.0f} {g('gate_waits'):>6.0f} {g('trim_kv_tokens'):>7.0f} "
+              f"{g('recompute_per_task'):>6.0f} {g('prefill_per_task'):>7.0f} {g('cache_hit_rate'):>5.2f} "
+              f"{g('admit_wait_p50'):>6.1f}/{g('admit_wait_p95'):<6.1f} {g('service_p50'):>5.1f}/{g('service_p95'):<5.1f} "
+              f"{g('llm_calls_per_task'):>5.2f} {g('forced_share'):>6.1%} {g('em'):>5.3f} {g('output_tokens_per_request'):>5.0f} "
+              f"{g('gpu_mem_peak_mib'):>7.0f} {g('gpu_util_mean'):>4.0f} {g('host_rss_peak_mib'):>5.0f}")
 
     print("\nrule fixed in advance (|gap| > 2 x larger sd): kv vs base")
     decision: dict[str, Any] = {}
