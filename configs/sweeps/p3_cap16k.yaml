@@ -4,9 +4,26 @@
 # Added after the main experiment (user's go-ahead, 2026-11-24): selective KV's capacity on the same final code
 # (kv rho 1.5, 2 runs), so the peak-goodput comparison uses one code version. Rule fixed in advance (4.5): the gap
 # is clear when it exceeds 2 x the larger sd. Report: uv run python -m analysis.p3_tune results/p3_cap16k
+# Added next (user's go-ahead, 2026-11-25): the text-deletion + re-prefill baseline (`--selective text`: the
+# same sentences removed from the prompt text only, so the next request re-prefills from the first change),
+# rho 1.5 and 1.75, 2 runs each. Rule fixed in advance: text's best point vs kv rho 1.5, clear when the gap
+# exceeds 2 x the larger sd. One more rho (2 runs) is added outside the grid only if text's best sits at the
+# grid's edge AND is within that bar of kv (i.e. only if it could change the conclusion).
+# Result: text rho 1.75 33.2 > kv rho 1.5 30.7, but kv had only rho 1.5 on the final code (a design gap). Last
+# addition (user's go-ahead, 2026-11-25): kv rho 1.75, 2 runs, so both mechanisms have rho {1.5, 1.75}. Rule fixed
+# in advance: kv's best vs text's best, clear when the gap exceeds 2 x the larger sd. Stop rule: no more points
+# after this whatever the result; a best point at rho 1.75 (grid edge) is reported as a limitation.
+# Result: kv 1.75 33.7 vs text 1.75 33.2 -> tie. kv's best moved from 1.5 (old code) to 1.75 (final code), so the
+# base gets the same treatment (user's go-ahead, 2026-11-25): base rho 2.0, 2 runs. Rule fixed in advance: the
+# base's best of {1.75, 2.0} vs kv 33.7, clear when the gap exceeds 2 x the larger sd. Last run for the report:
+# no rho 2.25 even if 2.0 is best (grid edge -> limitation), and the main experiment is not rerun.
 name: p3_cap16k
 defaults: {ctx: 16384, parallel: 64, workload: workloads/p3_long_dev200.json, delay_scale: 1.0, k: 8, reps: 2,
            llama_server: ~/llama.cpp/build/bin/llama-server, sel_scorer: bm25, sel_keep: 0.3, sel_keep_last: 0}
 points:
   - {name: base_r1.75, policy: base_fork, overcommit: 1.75}
   - {name: kv_r1.5, policy: base_fork, overcommit: 1.5, selective: kv}
+  - {name: text_r1.5, policy: base_fork, overcommit: 1.5, selective: text}
+  - {name: text_r1.75, policy: base_fork, overcommit: 1.75, selective: text}
+  - {name: kv_r1.75, policy: base_fork, overcommit: 1.75, selective: kv}
+  - {name: base_r2.0, policy: base_fork, overcommit: 2.0}

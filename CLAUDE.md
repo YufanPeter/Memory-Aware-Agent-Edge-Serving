@@ -62,7 +62,14 @@ recomputed tokens and prefix-cache hits explain the results.
   - Capacity (dev 200, t=0, 2 runs, `configs/sweeps/p3_cap16k.yaml`): base rho 1.75 goodput 27.9 +- 0.4
     (53.5 tasks/min), kv rho 1.5 30.7 +- 0.6 (59.6): **+10.2% goodput, clear**, +11.5% throughput, paired
     dF1 -0.002. The earlier +26% (and +11% under the old pressure rule) came from code before the smoke-check
-    fixes, which made the base faster; they are no longer the claim.
+    fixes, which made the base faster; they are no longer the claim. Added kv rho 1.75: 33.7 +- 0.5 (64.2), i.e.
+    +20.8% over the base at the same rho 1.75 (clear). The base re-checked at rho 2.0 on the final code: 25.3 +- 1.7,
+    below 1.75, so 1.75 stays its best and +20.8% is the peak-goodput claim. No more runs for the report.
+  - Text deletion + re-prefill control (same file, rho 1.5 / 1.75 for both mechanisms): best vs best kv 33.7 vs text
+    33.2, **goodput tie** (+1.4%, bar 1.1). kv is faster per request in all 4 run pairs (TPOT p50 -12-18%, TTFT p95
+    -22-26%, prefill tokens -14-16%) although it deletes 22% fewer chars (spans off token boundaries are skipped).
+    So the gain over the base comes from deleting used search content; in-place deletion's edge is no re-prefill
+    (per-request latency), not goodput, at 16k on the A10G. Both bests sit at rho 1.75 (grid edge): a limitation.
   - Main experiment (test 500, bursty, 50/80/110% of 53.5, 3 rounds, `results/p3_main16k/main.json`): at 80%
     latency p95 -22% / p99 -26% (clear); at 110% goodput +7.6% and p95/p99 -32%/-31%, better in all 3 rounds
     but not clear (the base varies across arrival sequences; open-loop goodput is capped by the arrival rate,
